@@ -7,13 +7,15 @@ env/
 ENV/
 .venv/
 
-# Данные бота (пользователи и ответы)
-data/
-!data/.gitkeep
+# Данные бота (пользователи и ответы) - игнорируем файлы, но не папку
+data/*.json
+data/*.csv
+data/*.txt
 
-# Отчеты CSV
-reports/
-!reports/.gitkeep
+# Отчеты CSV - игнорируем файлы, но не папку
+reports/*.csv
+reports/*.xlsx
+reports/*.txt
 
 # Python кэш и временные файлы
 __pycache__/
