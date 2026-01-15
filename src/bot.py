@@ -7,7 +7,7 @@ from pathlib import Path
 import logging
 
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -112,6 +112,15 @@ class FeedbackBot:
 
 # Создаем экземпляр бота
 feedback_bot = FeedbackBot()
+
+# Клавиатура для администратора
+admin_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📋 Меню")]
+    ],
+    resize_keyboard=True,
+    persistent=True
+)
 
 
 async def send_daily_survey_async(bot_instance):
@@ -468,7 +477,36 @@ async def start_command(message: Message):
             f"Увидимся в {SURVEY_TIME}! 🕐"
         )
     
-    await message.answer(welcome_message, parse_mode='Markdown')
+    await message.answer(welcome_message, parse_mode='Markdown', reply_markup=admin_keyboard if chat_id == MANAGER_CHAT_ID else None)
+
+async def menu_button_handler(message: Message):
+    """Обработчик кнопки 📋 Меню для администратора"""
+    user_id = str(message.from_user.id)
+    
+    # Проверяем что это администратор
+    if user_id != MANAGER_CHAT_ID:
+        return
+    
+    # Отправляем то же сообщение что и при /start
+    user = message.from_user
+    welcome_message = (
+        f"👑 Меню администратора\n\n"
+        "🔧 **Доступные команды:**\n"
+        "• `/report` - получить отчет за сегодня\n"
+        "• `/createreport` - принудительно создать отчет (перезапишет старый)\n"
+        "• `/download` - скачать CSV файл за сегодня\n"
+        "• `/download YYYY-MM-DD` - скачать за конкретную дату\n"
+        "• `/reports` - список всех отчетов\n"
+        "• `/stats` - статистика по боту\n"
+        "• `/test` - тестовый опрос\n"
+        "• `/schedule` - текущее расписание\n"
+        "• `/help` - помощь по командам\n\n"
+        "📊 **Автоматическое расписание:**\n"
+        f"• {SURVEY_TIME} МСК - опрос сотрудников\n"
+        f"• {REPORT_TIME} МСК - отчет + CSV файл вам в личные сообщения"
+    )
+    
+    await message.answer(welcome_message, parse_mode='Markdown', reply_markup=admin_keyboard)
 
 async def test_survey_command(message: Message):
     """Команда для тестового опроса"""
@@ -747,6 +785,7 @@ async def main():
         
         # Регистрируем обработчики
         dp.message.register(start_command, CommandStart())
+        dp.message.register(menu_button_handler, F.text == "📋 Меню")
         dp.message.register(test_survey_command, Command('test'))
         dp.message.register(report_command, Command('report'))
         dp.message.register(force_report_command, Command('createreport'))
