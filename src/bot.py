@@ -183,25 +183,7 @@ async def generate_daily_report_async(bot_instance):
     
     try:
         today = datetime.now(MSK_TZ).strftime('%Y-%m-%d')
-        today_formatted = datetime.now(MSK_TZ).strftime('%A, %d %B %Y')
-        
-        # Переводим на русский
-        days_ru = {
-            'Monday': 'Понедельник', 'Tuesday': 'Вторник', 'Wednesday': 'Среда',
-            'Thursday': 'Четверг', 'Friday': 'Пятница', 'Saturday': 'Суббота', 'Sunday': 'Воскресенье'
-        }
-        
-        months_ru = {
-            'January': 'января', 'February': 'февраля', 'March': 'марта',
-            'April': 'апреля', 'May': 'мая', 'June': 'июня',
-            'July': 'июля', 'August': 'августа', 'September': 'сентября',
-            'October': 'октября', 'November': 'ноября', 'December': 'декабря'
-        }
-        
-        for eng, ru in days_ru.items():
-            today_formatted = today_formatted.replace(eng, ru)
-        for eng, ru in months_ru.items():
-            today_formatted = today_formatted.replace(eng, ru)
+        today_formatted = datetime.now(MSK_TZ).strftime('%d.%m.%Y')
         
         responses = feedback_bot.responses.get(today, {})
         
@@ -289,11 +271,18 @@ async def save_report_to_csv(date, responses):
 async def send_csv_file(bot_instance, chat_id, csv_path, date):
     """Отправляет CSV файл в Telegram"""
     try:
+        # Конвертируем дату в русский формат для отображения
+        try:
+            date_obj = datetime.strptime(date, '%Y-%m-%d')
+            formatted_date = date_obj.strftime('%d.%m.%Y')
+        except:
+            formatted_date = date  # Если не получилось конвертировать, оставляем как есть
+        
         file = FSInputFile(csv_path)
         await bot_instance.send_document(
             chat_id=chat_id,
             document=file,
-            caption=f"📎 Отчет за {date} в формате CSV\n\nОткройте в Excel для удобного просмотра."
+            caption=f"📎 Отчет за {formatted_date} в формате CSV\n\nОткройте в Excel для удобного просмотра."
         )
         logger.info(f"CSV файл отправлен: {csv_path}")
     except Exception as e:
@@ -314,18 +303,25 @@ async def download_command(message: Message):
         # Без аргументов - отчет за сегодня
         date = datetime.now(MSK_TZ).strftime('%Y-%m-%d')
     else:
-        # С датой
-        date = args[1].strip()
-        # Валидация формата даты
+        # С датой в русском формате (ДД.ММ.ГГГГ)
+        date_input = args[1].strip()
+        
+        # Пробуем парсить русский формат
         try:
-            datetime.strptime(date, '%Y-%m-%d')
+            date_obj = datetime.strptime(date_input, '%d.%m.%Y')
+            date = date_obj.strftime('%Y-%m-%d')  # Конвертируем в внутренний формат
         except ValueError:
-            await message.answer(
-                "❌ Неверный формат даты. Используйте:\n"
-                "• `/download` - отчет за сегодня\n"
-                "• `/download 2026-01-15` - отчет за конкретную дату"
-            )
-            return
+            # Если не получилось, пробуем старый формат для совместимости
+            try:
+                datetime.strptime(date_input, '%Y-%m-%d')
+                date = date_input
+            except ValueError:
+                await message.answer(
+                    "❌ Неверный формат даты. Используйте:\n"
+                    "• `/download` - отчет за сегодня\n"
+                    "• `/download ДД.ММ.ГГГГ` - отчет за конкретную дату"
+                )
+                return
     
     csv_file = REPORTS_DIR / f"report_{date}.csv"
     
@@ -372,7 +368,7 @@ async def reports_list_command(message: Message):
             file_size = csv_file.stat().st_size
             size_kb = file_size / 1024
             
-            report_list += f"{i}. `{date_str}` ({formatted_date}) - {size_kb:.1f} KB\n"
+            report_list += f"{i}. {formatted_date} - {size_kb:.1f} KB\n"
         except:
             continue
     
@@ -383,7 +379,7 @@ async def reports_list_command(message: Message):
         f"\n📊 Всего отчетов: {len(csv_files)}\n\n"
         "💡 **Как скачать:**\n"
         "• `/download` - отчет за сегодня\n"
-        "• `/download 2026-01-15` - отчет за конкретную дату"
+        "• `/download ДД.ММ.ГГГГ` - отчет за конкретную дату"
     )
     
     await message.answer(report_list, parse_mode='Markdown')
@@ -448,10 +444,11 @@ async def start_command(message: Message):
             "Вы вошли как *администратор*\n\n"
             "🔧 **Доступные команды:**\n"
             "• `/report` - получить отчет за сегодня\n"
-            "• `/createreport` - принудительно создать отчет (перезапишет старый)\n"
+            "• `/createreport` - создать отчет (перезапишет старый)\n"
             "• `/download` - скачать CSV файл за сегодня\n"
-            "• `/download YYYY-MM-DD` - скачать за конкретную дату\n"
+            "• `/download ДД.ММ.ГГГГ` - скачать за конкретную дату\n"
             "• `/reports` - список всех отчетов\n"
+            "• `/users` - управление пользователями\n"
             "• `/stats` - статистика по боту\n"
             "• `/test` - тестовый опрос\n"
             "• `/schedule` - текущее расписание\n"
@@ -479,6 +476,144 @@ async def start_command(message: Message):
     
     await message.answer(welcome_message, parse_mode='Markdown', reply_markup=admin_keyboard if chat_id == MANAGER_CHAT_ID else None)
 
+async def users_command(message: Message):
+    """Команда для просмотра списка пользователей с возможностью удаления (только для админа)"""
+    user_id = str(message.from_user.id)
+    
+    if user_id != MANAGER_CHAT_ID:
+        await message.answer("❌ Эта команда доступна только администратору.")
+        return
+    
+    if not feedback_bot.users:
+        await message.answer("👥 Пользователей пока нет.")
+        return
+    
+    # Считаем статистику для каждого пользователя
+    total_days = len(feedback_bot.responses)
+    
+    users_text = f"👥 Пользователи ({len(feedback_bot.users)}):\n\n"
+    keyboard_buttons = []
+    
+    for chat_id, user_data in feedback_bot.users.items():
+        username = user_data.get('username', 'Неизвестный')
+        first_name = user_data.get('first_name', 'Неизвестный')
+        is_admin = user_data.get('is_admin', False)
+        registered_at = user_data.get('registered_at', '')
+        
+        # Форматируем дату регистрации
+        try:
+            reg_date = datetime.fromisoformat(registered_at.replace('Z', '+00:00'))
+            reg_formatted = reg_date.strftime('%d.%m.%Y')
+        except:
+            reg_formatted = 'Неизвестно'
+        
+        # Считаем количество ответов пользователя
+        user_responses = 0
+        for day_responses in feedback_bot.responses.values():
+            if chat_id in day_responses:
+                user_responses += 1
+        
+        # Процент участия
+        participation = (user_responses / total_days * 100) if total_days > 0 else 0
+        
+        # Формируем текст для пользователя
+        status = "👑 админ" if is_admin else "👤 сотрудник"
+        users_text += f"{first_name} (@{username}) - {status}\n"
+        users_text += f"📅 Зарегистрирован: {reg_formatted}\n"
+        users_text += f"📊 Ответов: {user_responses}/{total_days} ({participation:.0f}%)\n"
+        
+        # Добавляем кнопку удаления (кроме самого админа)
+        if chat_id != MANAGER_CHAT_ID:
+            keyboard_buttons.append([
+                InlineKeyboardButton(
+                    text=f"❌ Удалить {first_name}",
+                    callback_data=f"delete_user_{chat_id}"
+                )
+            ])
+            users_text += "\n"
+        else:
+            users_text += "🔒 Нельзя удалить\n\n"
+    
+    # Создаем клавиатуру
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons) if keyboard_buttons else None
+    
+    await message.answer(users_text, reply_markup=keyboard)
+
+async def delete_user_callback(callback: CallbackQuery):
+    """Обработчик кнопки удаления пользователя"""
+    await callback.answer()
+    
+    # Проверяем что это админ
+    if str(callback.from_user.id) != MANAGER_CHAT_ID:
+        await callback.message.answer("❌ Только администратор может удалять пользователей.")
+        return
+    
+    # Извлекаем ID пользователя из callback_data
+    user_to_delete = callback.data.replace('delete_user_', '')
+    
+    # Проверяем что пользователь существует
+    if user_to_delete not in feedback_bot.users:
+        await callback.message.answer("❌ Пользователь не найден.")
+        return
+    
+    # Получаем данные пользователя
+    user_data = feedback_bot.users[user_to_delete]
+    username = user_data.get('first_name', 'Неизвестный')
+    
+    # Создаем кнопки подтверждения
+    confirm_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete_{user_to_delete}"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_delete")
+        ]
+    ])
+    
+    await callback.message.answer(
+        f"⚠️ Подтверждение удаления\n\n"
+        f"Вы действительно хотите удалить пользователя {username}?\n\n"
+        f"❗ Это действие нельзя отменить!\n"
+        f"❗ Все ответы пользователя останутся в отчетах.",
+        reply_markup=confirm_keyboard
+    )
+
+async def confirm_delete_callback(callback: CallbackQuery):
+    """Обработчик подтверждения удаления пользователя"""
+    await callback.answer()
+    
+    # Проверяем что это админ
+    if str(callback.from_user.id) != MANAGER_CHAT_ID:
+        return
+    
+    if callback.data.startswith('confirm_delete_'):
+        # Извлекаем ID пользователя
+        user_to_delete = callback.data.replace('confirm_delete_', '')
+        
+        # Проверяем что пользователь существует
+        if user_to_delete not in feedback_bot.users:
+            await callback.message.edit_text("❌ Пользователь не найден.")
+            return
+        
+        # Получаем данные пользователя для логирования
+        user_data = feedback_bot.users[user_to_delete]
+        username = user_data.get('first_name', 'Неизвестный')
+        user_username = user_data.get('username', 'Неизвестный')
+        
+        # Удаляем пользователя
+        del feedback_bot.users[user_to_delete]
+        feedback_bot.save_users()
+        
+        # Логируем удаление
+        logger.info(f"Администратор удалил пользователя: {username} (@{user_username}, ID: {user_to_delete})")
+        
+        await callback.message.edit_text(
+            f"✅ Пользователь удален\n\n"
+            f"Пользователь {username} (@{user_username}) успешно удален из системы.\n\n"
+            f"📝 Его ответы в отчетах сохранены."
+        )
+        
+    elif callback.data == 'cancel_delete':
+        await callback.message.edit_text("❌ Удаление отменено.")
+
 async def menu_button_handler(message: Message):
     """Обработчик кнопки 📋 Меню для администратора"""
     user_id = str(message.from_user.id)
@@ -493,10 +628,11 @@ async def menu_button_handler(message: Message):
         f"👑 Меню администратора\n\n"
         "🔧 **Доступные команды:**\n"
         "• `/report` - получить отчет за сегодня\n"
-        "• `/createreport` - принудительно создать отчет (перезапишет старый)\n"
+        "• `/createreport` - создать отчет (перезапишет старый)\n"
         "• `/download` - скачать CSV файл за сегодня\n"
-        "• `/download YYYY-MM-DD` - скачать за конкретную дату\n"
+        "• `/download ДД.ММ.ГГГГ` - скачать за конкретную дату\n"
         "• `/reports` - список всех отчетов\n"
+        "• `/users` - управление пользователями\n"
         "• `/stats` - статистика по боту\n"
         "• `/test` - тестовый опрос\n"
         "• `/schedule` - текущее расписание\n"
@@ -610,7 +746,7 @@ async def report_command(message: Message):
     await generate_daily_report_async(bot)
 
 async def force_report_command(message: Message):
-    """Команда для принудительного создания отчета с перезаписью (только для админа)"""
+    """Команда для создания отчета с перезаписью (только для админа)"""
     user_id = str(message.from_user.id)
     
     if user_id != MANAGER_CHAT_ID:
@@ -684,10 +820,11 @@ async def help_command(message: Message):
             "🔧 **Команды управления:**\n"
             "• `/start` - перезапуск и информация\n"
             "• `/report` - получить отчет за сегодня\n"
-            "• `/createreport` - принудительно создать отчет (перезапишет старый)\n"
+            "• `/createreport` - создать отчет (перезапишет старый)\n"
             "• `/download` - скачать CSV за сегодня\n"
-            "• `/download YYYY-MM-DD` - скачать за дату\n"
+            "• `/download ДД.ММ.ГГГГ` - скачать за дату\n"
             "• `/reports` - список всех отчетов\n"
+            "• `/users` - управление пользователями\n"
             "• `/stats` - статистика по пользователям\n"
             "• `/test` - тестовый опрос\n"
             "• `/schedule` - посмотреть расписание\n"
@@ -703,10 +840,15 @@ async def help_command(message: Message):
             "⚙️ **Настройка времени:**\n"
             "Измените `SURVEY_TIME` и `REPORT_TIME` в файле `.env`\n"
             "Формат: HH:MM (например, 09:30 или 18:45)\n\n"
-            "🔄 **Принудительное создание отчета:**\n"
+            "🔄 **Создание отчета:**\n"
             "• `/createreport` создаст отчет прямо сейчас\n"
             "• Если отчет за сегодня уже существует, он будет перезаписан\n"
             "• Полезно если нужно обновить данные после новых ответов\n\n"
+            "👥 **Управление пользователями:**\n"
+            "• `/users` показывает список всех пользователей\n"
+            "• Отображает статистику участия каждого сотрудника\n"
+            "• Позволяет удалить пользователей (кроме администратора)\n"
+            "• Удаление требует подтверждения для безопасности\n\n"
             "💡 **Совет:** Используйте `/reports` для просмотра всех доступных отчетов"
         )
     else:
@@ -791,10 +933,14 @@ async def main():
         dp.message.register(force_report_command, Command('createreport'))
         dp.message.register(download_command, Command('download'))
         dp.message.register(reports_list_command, Command('reports'))
+        dp.message.register(users_command, Command('users'))
         dp.message.register(stats_command, Command('stats'))
         dp.message.register(help_command, Command('help'))
         dp.message.register(schedule_command, Command('schedule'))
         dp.callback_query.register(mood_callback, F.data.startswith('mood_'))
+        dp.callback_query.register(delete_user_callback, F.data.startswith('delete_user_'))
+        dp.callback_query.register(confirm_delete_callback, F.data.startswith('confirm_delete_'))
+        dp.callback_query.register(confirm_delete_callback, F.data == 'cancel_delete')
         
         # Обработчик текстовых сообщений для проекта (только в состоянии waiting_for_project)
         dp.message.register(project_message, FeedbackStates.waiting_for_project)
