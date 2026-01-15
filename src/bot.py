@@ -5,12 +5,9 @@ import csv
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import logging
-import schedule
-import time
-import threading
 
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -48,8 +45,8 @@ REPORT_TIME = validate_time_format(os.getenv('REPORT_TIME', '21:00'), '21:00')
 MSK_TZ = timezone(timedelta(hours=3))
 
 # Пути к файлам данных
-DATA_DIR = Path(__file__).parent.parent / 'data'
-REPORTS_DIR = Path(__file__).parent.parent / 'reports'
+DATA_DIR = Path.cwd() / 'data'
+REPORTS_DIR = Path.cwd() / 'reports'
 USER_DATA_FILE = DATA_DIR / 'users.json'
 RESPONSES_FILE = DATA_DIR / 'responses.json'
 
@@ -117,49 +114,12 @@ class FeedbackBot:
 feedback_bot = FeedbackBot()
 
 
-# Функции планировщика
-def send_survey_sync():
-    """Синхронная обертка для отправки опроса"""
-    logger.info("Запуск ежедневного опроса...")
-    try:
-        # Создаем новый event loop для этого потока
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(send_daily_survey_async())
-    except Exception as e:
-        logger.error(f"Ошибка в планировщике опроса: {e}")
-    finally:
-        try:
-            loop.close()
-        except:
-            pass
-
-def send_report_sync():
-    """Синхронная обертка для отправки отчета"""
-    logger.info("Запуск формирования отчета...")
-    try:
-        # Создаем новый event loop для этого потока
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(generate_daily_report_async())
-    except Exception as e:
-        logger.error(f"Ошибка в планировщике отчета: {e}")
-    finally:
-        try:
-            loop.close()
-        except:
-            pass
-
-async def send_daily_survey_async():
+async def send_daily_survey_async(bot_instance):
     """Отправляет ежедневный опрос всем пользователям"""
-    global bot
     
-    if not bot:
+    if not bot_instance:
         logger.error("Бот не инициализирован")
         return
-    
-    # Создаем новый экземпляр бота для этого потока
-    survey_bot = Bot(token=BOT_TOKEN)
     
     try:
         today = datetime.now(MSK_TZ).strftime('%Y-%m-%d')
@@ -184,7 +144,7 @@ async def send_daily_survey_async():
         
         for chat_id in feedback_bot.users:
             try:
-                await survey_bot.send_message(
+                await bot_instance.send_message(
                     chat_id=int(chat_id),
                     text="Как прошел твой день? 🤔",
                     reply_markup=keyboard
@@ -198,19 +158,19 @@ async def send_daily_survey_async():
         logger.info(f"Опрос завершен. Отправлено: {sent_count}, ошибок: {error_count}")
         feedback_bot.save_responses()
         
-    finally:
-        await survey_bot.session.close()
+    except Exception as e:
+        logger.error(f"Ошибка в отправке опроса: {e}")
 
-async def generate_daily_report_async():
+async def generate_daily_report_async(bot_instance):
     """Генерирует и отправляет ежедневный отчет менеджеру"""
-    global bot
     
     if not MANAGER_CHAT_ID:
         logger.error("MANAGER_CHAT_ID не настроен")
         return
     
-    # Создаем новый экземпляр бота для этого потока
-    report_bot = Bot(token=BOT_TOKEN)
+    if not bot_instance:
+        logger.error("Бот не инициализирован")
+        return
     
     try:
         today = datetime.now(MSK_TZ).strftime('%Y-%m-%d')
@@ -279,18 +239,18 @@ async def generate_daily_report_async():
                     username = user['username']
                     report += f"  • @{username}\n"
         
-        # Отправляем отчет
-        await report_bot.send_message(chat_id=int(MANAGER_CHAT_ID), text=report)
+        # Отправляем текстовый отчет
+        await bot_instance.send_message(chat_id=int(MANAGER_CHAT_ID), text=report)
         logger.info("Отчет отправлен менеджеру")
         
-        # Сохраняем в CSV
+        # Сохраняем в CSV и отправляем файл
         if today in feedback_bot.responses:
-            await save_report_to_csv(today, feedback_bot.responses[today])
+            csv_path = await save_report_to_csv(today, feedback_bot.responses[today])
+            if csv_path and csv_path.exists():
+                await send_csv_file(bot_instance, int(MANAGER_CHAT_ID), csv_path, today)
             
     except Exception as e:
         logger.error(f"Ошибка отправки отчета: {e}")
-    finally:
-        await report_bot.session.close()
 
 async def save_report_to_csv(date, responses):
     """Сохраняет отчет в CSV формате для Excel"""
@@ -311,44 +271,148 @@ async def save_report_to_csv(date, responses):
                 ])
         
         logger.info(f"Отчет сохранен в CSV: {csv_file}")
+        return csv_file
         
     except Exception as e:
         logger.error(f"Ошибка сохранения CSV: {e}")
+        return None
 
-def setup_scheduler():
-    """Настройка планировщика задач"""
-    logger.info(f"Настройка планировщика...")
-    logger.info(f"Текущее время МСК: {datetime.now(MSK_TZ).strftime('%H:%M:%S')}")
-    
+async def send_csv_file(bot_instance, chat_id, csv_path, date):
+    """Отправляет CSV файл в Telegram"""
     try:
-        # Планируем задачи напрямую на московское время
-        schedule.every().day.at(SURVEY_TIME).do(send_survey_sync)
-        schedule.every().day.at(REPORT_TIME).do(send_report_sync)
-        
-        logger.info("Планировщик настроен:")
-        logger.info(f"- Ежедневный опрос: {SURVEY_TIME} МСК")
-        logger.info(f"- Ежедневный отчет: {REPORT_TIME} МСК")
-        
+        file = FSInputFile(csv_path)
+        await bot_instance.send_document(
+            chat_id=chat_id,
+            document=file,
+            caption=f"📎 Отчет за {date} в формате CSV\n\nОткройте в Excel для удобного просмотра."
+        )
+        logger.info(f"CSV файл отправлен: {csv_path}")
     except Exception as e:
-        logger.error(f"Ошибка настройки планировщика: {e}")
+        logger.error(f"Ошибка отправки CSV файла: {e}")
+
+async def download_command(message: Message):
+    """Команда для скачивания отчета (только для админа)"""
+    user_id = str(message.from_user.id)
+    
+    if user_id != MANAGER_CHAT_ID:
+        await message.answer("❌ Эта команда доступна только администратору.")
         return
     
-    # Добавляем heartbeat для мониторинга
-    def scheduler_heartbeat():
-        current_time_msk = datetime.now(MSK_TZ).strftime('%H:%M:%S')
-        logger.info(f"Планировщик работает. Время МСК: {current_time_msk}")
+    # Парсим аргументы команды
+    args = message.text.split(maxsplit=1)
     
-    # Каждые 10 минут (чтобы не спамить)
-    schedule.every(10).minutes.do(scheduler_heartbeat)
+    if len(args) == 1:
+        # Без аргументов - отчет за сегодня
+        date = datetime.now(MSK_TZ).strftime('%Y-%m-%d')
+    else:
+        # С датой
+        date = args[1].strip()
+        # Валидация формата даты
+        try:
+            datetime.strptime(date, '%Y-%m-%d')
+        except ValueError:
+            await message.answer(
+                "❌ Неверный формат даты. Используйте:\n"
+                "• `/download` - отчет за сегодня\n"
+                "• `/download 2026-01-15` - отчет за конкретную дату"
+            )
+            return
     
-    logger.info(f"- Мониторинг каждые 10 минут")
+    csv_file = REPORTS_DIR / f"report_{date}.csv"
+    
+    if not csv_file.exists():
+        await message.answer(
+            f"❌ Отчет за {date} не найден.\n\n"
+            "Возможные причины:\n"
+            "• Отчет еще не был создан\n"
+            "• Никто не ответил на опрос в этот день\n"
+            "• Неверная дата\n\n"
+            "💡 Используйте `/reports` для просмотра доступных отчетов"
+        )
+        return
+    
+    await message.answer("📎 Отправляю файл...")
+    await send_csv_file(bot, message.chat.id, csv_file, date)
 
-def run_scheduler():
-    """Запуск планировщика в отдельном потоке"""
-    setup_scheduler()
+async def reports_list_command(message: Message):
+    """Команда для просмотра списка всех отчетов (только для админа)"""
+    user_id = str(message.from_user.id)
+    
+    if user_id != MANAGER_CHAT_ID:
+        await message.answer("❌ Эта команда доступна только администратору.")
+        return
+    
+    # Получаем все CSV файлы
+    csv_files = sorted(REPORTS_DIR.glob("report_*.csv"), reverse=True)
+    
+    if not csv_files:
+        await message.answer("📁 Отчеты пока не созданы.\n\nОтчеты создаются автоматически после опроса.")
+        return
+    
+    # Формируем список
+    report_list = "📁 **Доступные отчеты:**\n\n"
+    
+    for i, csv_file in enumerate(csv_files[:10], 1):  # Показываем последние 10
+        # Извлекаем дату из имени файла
+        date_str = csv_file.stem.replace('report_', '')
+        try:
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+            formatted_date = date_obj.strftime('%d.%m.%Y')
+            
+            # Получаем размер файла
+            file_size = csv_file.stat().st_size
+            size_kb = file_size / 1024
+            
+            report_list += f"{i}. `{date_str}` ({formatted_date}) - {size_kb:.1f} KB\n"
+        except:
+            continue
+    
+    if len(csv_files) > 10:
+        report_list += f"\n... и еще {len(csv_files) - 10} отчетов\n"
+    
+    report_list += (
+        f"\n📊 Всего отчетов: {len(csv_files)}\n\n"
+        "💡 **Как скачать:**\n"
+        "• `/download` - отчет за сегодня\n"
+        "• `/download 2026-01-15` - отчет за конкретную дату"
+    )
+    
+    await message.answer(report_list, parse_mode='Markdown')
+
+async def scheduler_task(bot_instance):
+    logger.info(f"Планировщик запущен. Опрос: {SURVEY_TIME} МСК, Отчет: {REPORT_TIME} МСК")
+    
     while True:
-        schedule.run_pending()
-        time.sleep(60)
+        try:
+            # Ждём до начала следующей минуты
+            now = datetime.now(MSK_TZ)
+            next_minute = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
+            sleep_seconds = (next_minute - now).total_seconds()
+            
+            if sleep_seconds > 0:
+                await asyncio.sleep(sleep_seconds)
+            
+            # Теперь мы точно в начале новой минуты
+            current_time = next_minute.strftime('%H:%M')
+            today_str = next_minute.strftime('%Y-%m-%d')
+            
+            logger.debug(f"Текущее время МСК: {current_time}")
+            
+            if current_time == SURVEY_TIME:
+                logger.info("Запуск ежедневного опроса...")
+                await send_daily_survey_async(bot_instance)
+            
+            elif current_time == REPORT_TIME:
+                logger.info("Запуск формирования отчета...")
+                await generate_daily_report_async(bot_instance)
+            
+            # Логирование каждые 10 минут
+            if next_minute.minute % 10 == 0:
+                logger.info(f"Планировщик активен. Время МСК: {current_time}")
+                
+        except Exception as e:
+            logger.error(f"Ошибка в планировщике: {e}")
+            await asyncio.sleep(60)
 
 
 # Обработчики команд
@@ -375,13 +439,17 @@ async def start_command(message: Message):
             "Вы вошли как *администратор*\n\n"
             "🔧 **Доступные команды:**\n"
             "• `/report` - получить отчет за сегодня\n"
+            "• `/createreport` - принудительно создать отчет (перезапишет старый)\n"
+            "• `/download` - скачать CSV файл за сегодня\n"
+            "• `/download YYYY-MM-DD` - скачать за конкретную дату\n"
+            "• `/reports` - список всех отчетов\n"
             "• `/stats` - статистика по боту\n"
             "• `/test` - тестовый опрос\n"
             "• `/schedule` - текущее расписание\n"
             "• `/help` - помощь по командам\n\n"
             "📊 **Автоматическое расписание:**\n"
             f"• {SURVEY_TIME} МСК - опрос сотрудников\n"
-            f"• {REPORT_TIME} МСК - отчет вам в личные сообщения\n\n"
+            f"• {REPORT_TIME} МСК - отчет + CSV файл вам в личные сообщения\n\n"
             f"🆔 Ваш Chat ID: `{chat_id}`"
         )
     else:
@@ -501,8 +569,34 @@ async def report_command(message: Message):
         return
     
     await message.answer("📊 Формирую отчет за сегодня...")
-    await generate_daily_report_async()
-    await message.answer("✅ Отчет сформирован и отправлен!")
+    await generate_daily_report_async(bot)
+
+async def force_report_command(message: Message):
+    """Команда для принудительного создания отчета с перезаписью (только для админа)"""
+    user_id = str(message.from_user.id)
+    
+    if user_id != MANAGER_CHAT_ID:
+        await message.answer("❌ Эта команда доступна только администратору.")
+        return
+    
+    today = datetime.now(MSK_TZ).strftime('%Y-%m-%d')
+    csv_file = REPORTS_DIR / f"report_{today}.csv"
+    
+    # Проверяем существует ли отчет
+    file_exists = csv_file.exists()
+    
+    if file_exists:
+        await message.answer("⚠️ Отчет за сегодня уже существует. Создаю новый (старый будет заменен)...")
+    else:
+        await message.answer("📊 Создаю отчет за сегодня...")
+    
+    # Генерируем отчет (он автоматически перезапишет старый файл)
+    await generate_daily_report_async(bot)
+    
+    if file_exists:
+        await message.answer("✅ Отчет обновлен и отправлен!")
+    else:
+        await message.answer("✅ Отчет создан и отправлен!")
 
 async def stats_command(message: Message):
     """Команда статистики (только для админа)"""
@@ -552,21 +646,30 @@ async def help_command(message: Message):
             "🔧 **Команды управления:**\n"
             "• `/start` - перезапуск и информация\n"
             "• `/report` - получить отчет за сегодня\n"
+            "• `/createreport` - принудительно создать отчет (перезапишет старый)\n"
+            "• `/download` - скачать CSV за сегодня\n"
+            "• `/download YYYY-MM-DD` - скачать за дату\n"
+            "• `/reports` - список всех отчетов\n"
             "• `/stats` - статистика по пользователям\n"
             "• `/test` - тестовый опрос\n"
             "• `/schedule` - посмотреть расписание\n"
             "• `/help` - эта справка\n\n"
-            "📊 **Автоматические процессы:**\n"
+            "�  **Автоматические процессы:**\n"
             f"• **{SURVEY_TIME} МСК** - автоматический опрос всех сотрудников\n"
-            f"• **{REPORT_TIME} МСК** - автоматический отчет вам в личные сообщения\n\n"
-            "📁 **Файлы данных:**\n"
-            "• `data/users.json` - база пользователей\n"
-            "• `data/responses.json` - все ответы\n"
-            "• `reports/report_YYYY-MM-DD.csv` - ежедневные отчеты для Excel\n\n"
+            f"• **{REPORT_TIME} МСК** - автоматический отчет + CSV файл\n\n"
+            "📁 **Работа с файлами:**\n"
+            "• CSV файлы автоматически отправляются вместе с отчетом\n"
+            "• Используйте `/download` для повторного скачивания\n"
+            "• Все файлы хранятся в папке `reports/`\n"
+            "• Формат имени: `report_YYYY-MM-DD.csv`\n\n"
             "⚙️ **Настройка времени:**\n"
             "Измените `SURVEY_TIME` и `REPORT_TIME` в файле `.env`\n"
             "Формат: HH:MM (например, 09:30 или 18:45)\n\n"
-            "💡 **Совет:** Используйте `/test` для проверки работы опроса"
+            "🔄 **Принудительное создание отчета:**\n"
+            "• `/createreport` создаст отчет прямо сейчас\n"
+            "• Если отчет за сегодня уже существует, он будет перезаписан\n"
+            "• Полезно если нужно обновить данные после новых ответов\n\n"
+            "💡 **Совет:** Используйте `/reports` для просмотра всех доступных отчетов"
         )
     else:
         # Помощь для сотрудника
@@ -632,32 +735,52 @@ async def main():
     
     logger.info("Инициализация бота...")
     
-    # Создаем бота и диспетчер
-    bot = Bot(token=BOT_TOKEN)
-    dp = Dispatcher(storage=MemoryStorage())
+    # Отладочная информация (скрываем часть токена для безопасности)
+    token_preview = BOT_TOKEN[:10] + "..." + BOT_TOKEN[-10:] if len(BOT_TOKEN) > 20 else "Токен слишком короткий"
+    logger.info(f"Токен: {token_preview}")
+    logger.info(f"Manager Chat ID: {MANAGER_CHAT_ID}")
     
-    # Регистрируем обработчики
-    dp.message.register(start_command, CommandStart())
-    dp.message.register(test_survey_command, Command('test'))
-    dp.message.register(report_command, Command('report'))
-    dp.message.register(stats_command, Command('stats'))
-    dp.message.register(help_command, Command('help'))
-    dp.message.register(schedule_command, Command('schedule'))
-    dp.callback_query.register(mood_callback, F.data.startswith('mood_'))
-    
-    # Обработчик текстовых сообщений для проекта (только в состоянии waiting_for_project)
-    dp.message.register(project_message, FeedbackStates.waiting_for_project)
-    
-    # Запускаем планировщик в отдельном потоке
-    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
-    scheduler_thread.start()
-    
-    logger.info("🚀 Бот запущен и готов к работе!")
-    logger.info(f"📅 Опрос: {SURVEY_TIME} МСК")
-    logger.info(f"📊 Отчет: {REPORT_TIME} МСК")
-    
-    # Запускаем бота
-    await dp.start_polling(bot)
+    try:
+        # Создаем бота и диспетчер
+        bot = Bot(token=BOT_TOKEN)
+        dp = Dispatcher(storage=MemoryStorage())
+        
+        # Регистрируем обработчики
+        dp.message.register(start_command, CommandStart())
+        dp.message.register(test_survey_command, Command('test'))
+        dp.message.register(report_command, Command('report'))
+        dp.message.register(force_report_command, Command('createreport'))
+        dp.message.register(download_command, Command('download'))
+        dp.message.register(reports_list_command, Command('reports'))
+        dp.message.register(stats_command, Command('stats'))
+        dp.message.register(help_command, Command('help'))
+        dp.message.register(schedule_command, Command('schedule'))
+        dp.callback_query.register(mood_callback, F.data.startswith('mood_'))
+        
+        # Обработчик текстовых сообщений для проекта (только в состоянии waiting_for_project)
+        dp.message.register(project_message, FeedbackStates.waiting_for_project)
+        
+        # Запускаем планировщик как фоновую задачу
+        scheduler_task_handle = asyncio.create_task(scheduler_task(bot))
+        
+        logger.info("🚀 Бот запущен и готов к работе!")
+        logger.info(f"📅 Опрос: {SURVEY_TIME} МСК")
+        logger.info(f"📊 Отчет: {REPORT_TIME} МСК")
+        
+        # Запускаем бота
+        await dp.start_polling(bot)
+        
+    except Exception as e:
+        logger.error(f"Ошибка запуска бота: {e}")
+        return
+    finally:
+        # Отменяем фоновую задачу при завершении
+        if 'scheduler_task_handle' in locals():
+            scheduler_task_handle.cancel()
+            try:
+                await scheduler_task_handle
+            except asyncio.CancelledError:
+                pass
 
 if __name__ == '__main__':
     try:
