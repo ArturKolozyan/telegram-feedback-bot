@@ -28,6 +28,9 @@ wheels/
 .installed.cfg
 *.egg
 
+# Compiled version (exe файлы большие)
+compiled/bot/*.exe
+
 # Данные (опционально - можно коммитить пустые файлы)
 # data/users.json
 # data/responses.json
