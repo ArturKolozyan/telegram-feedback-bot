@@ -572,7 +572,7 @@ async def schedule_command(message: Message):
     # Получаем настройки расписания
     survey_time = feedback_bot.schedule_settings.get("survey_time", "17:00")
     report_time = feedback_bot.schedule_settings.get("report_time", "21:00")
-    admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", False)
+    admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", True)
     
     # Статус напоминаний
     reminders_enabled = feedback_bot.reminder_settings.get("enabled", True)

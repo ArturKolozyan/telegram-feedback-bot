@@ -88,8 +88,9 @@ async def send_daily_survey_async(bot_instance):
         error_count = 0
         vacation_count = 0
         
-        # Проверяем настройку admin_as_employee
-        admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", False)
+        # Перезагружаем настройки чтобы подхватить изменения
+        feedback_bot.schedule_settings = feedback_bot.load_schedule_settings()
+        admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", True)
         
         for chat_id in feedback_bot.users:
             # Пропускаем админа если он не включен как сотрудник
@@ -180,10 +181,12 @@ async def send_reminders(bot_instance, today):
         ])
         
         sent_count = 0
+        
+        # Перезагружаем настройки чтобы подхватить изменения
+        feedback_bot.schedule_settings = feedback_bot.load_schedule_settings()
+        admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", True)
+        
         for chat_id in feedback_bot.users:
-            # Проверяем настройку admin_as_employee
-            admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", False)
-            
             # Пропускаем админа если он не включен как сотрудник
             if chat_id == MANAGER_CHAT_ID and not admin_as_employee:
                 continue
@@ -251,7 +254,7 @@ async def generate_daily_report_async(bot_instance):
                 report += f"❌ Не отправлено:\n• Отпуск: {', '.join(vacation_users)} ({len(vacation_users)} чел.)\n\n"
             
             # Проверяем настройку admin_as_employee для подсчета
-            admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", False)
+            admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", True)
             admin_count = 1 if not admin_as_employee else 0
             
             total_users = len(feedback_bot.users) - len(vacation_users) - admin_count
@@ -288,7 +291,7 @@ async def generate_daily_report_async(bot_instance):
             
             # Кто не ответил (исключая тех кто в отпуске)
             responded_user_ids = set(responses.keys())
-            admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", False)
+            admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", True)
             
             not_responded = [user_id for user_id in feedback_bot.users 
                            if user_id not in responded_user_ids 

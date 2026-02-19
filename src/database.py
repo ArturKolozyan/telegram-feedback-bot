@@ -122,13 +122,13 @@ class FeedbackBot:
                 default = {
                     "survey_time": "17:00",
                     "report_time": "21:00",
-                    "admin_as_employee": False
+                    "admin_as_employee": True
                 }
                 self.save_schedule_settings(default)
                 return default
         except Exception as e:
             logger.error(f"Ошибка загрузки schedule_settings.json: {e}")
-            return {"survey_time": "17:00", "report_time": "21:00", "admin_as_employee": False}
+            return {"survey_time": "17:00", "report_time": "21:00", "admin_as_employee": True}
     
     def save_schedule_settings(self, settings):
         """Сохраняет настройки расписания"""
