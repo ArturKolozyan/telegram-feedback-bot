@@ -92,7 +92,11 @@ async def send_daily_survey_async(bot_instance):
         feedback_bot.schedule_settings = feedback_bot.load_schedule_settings()
         admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", True)
         
+        logger.info(f"Начало отправки опросов. Всего пользователей: {len(feedback_bot.users)}, admin_as_employee: {admin_as_employee}")
+        
         for chat_id in feedback_bot.users:
+            logger.info(f"Обработка пользователя {chat_id}, MANAGER_CHAT_ID: {MANAGER_CHAT_ID}")
+            
             # Пропускаем админа если он не включен как сотрудник
             if chat_id == MANAGER_CHAT_ID and not admin_as_employee:
                 logger.info(f"Администратор исключен из опроса (admin_as_employee=False)")
@@ -119,6 +123,9 @@ async def send_daily_survey_async(bot_instance):
         logger.info(f"Опрос завершен. Отправлено: {sent_count}, в отпуске: {vacation_count}, ошибок: {error_count}")
         feedback_bot.save_responses()
         
+        # Перезагружаем настройки напоминаний
+        feedback_bot.reminder_settings = feedback_bot.load_reminder_settings()
+        
         # Запускаем напоминания если они включены
         if feedback_bot.reminder_settings.get("enabled", True):
             await schedule_reminders(bot_instance, today)
@@ -129,6 +136,8 @@ async def send_daily_survey_async(bot_instance):
 
 async def schedule_reminders(bot_instance, today):
     """Планирует напоминания для тех, кто не ответил"""
+    # Перезагружаем настройки напоминаний
+    feedback_bot.reminder_settings = feedback_bot.load_reminder_settings()
     reminder_times = feedback_bot.reminder_settings.get("times", [])
     
     for reminder_time in reminder_times:
@@ -365,6 +374,7 @@ async def scheduler_task(bot_instance):
     while True:
         try:
             # Перезагружаем настройки на каждой итерации (чтобы подхватить изменения)
+            feedback_bot.schedule_settings = feedback_bot.load_schedule_settings()
             survey_time = feedback_bot.schedule_settings.get("survey_time", "17:00")
             report_time = feedback_bot.schedule_settings.get("report_time", "21:00")
             
