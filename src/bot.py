@@ -10,7 +10,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import (
-    BOT_TOKEN, MANAGER_CHAT_ID, SURVEY_TIME, REPORT_TIME, MSK_TZ,
+    BOT_TOKEN, MANAGER_CHAT_ID, MSK_TZ,
     MOOD_OPTIONS, REPORTS_DIR, logger
 )
 from database import feedback_bot
@@ -34,7 +34,9 @@ from commands import (
     vacations_page_callback, vacations_delete_callback, confirm_vacations_delete_callback,
     VacationStates, show_vacation_page,
     # Месячные отчеты
-    mymonth_command
+    mymonth_command,
+    # Управление расписанием
+    setsurvey_command, setreport_command, adminsurvey_command
 )
 
 # Глобальная переменная для бота
@@ -86,7 +88,15 @@ async def send_daily_survey_async(bot_instance):
         error_count = 0
         vacation_count = 0
         
+        # Проверяем настройку admin_as_employee
+        admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", False)
+        
         for chat_id in feedback_bot.users:
+            # Пропускаем админа если он не включен как сотрудник
+            if chat_id == MANAGER_CHAT_ID and not admin_as_employee:
+                logger.info(f"Администратор исключен из опроса (admin_as_employee=False)")
+                continue
+            
             # Проверяем отпуск
             if feedback_bot.is_user_on_vacation(chat_id, today_date):
                 vacation_count += 1
@@ -171,6 +181,13 @@ async def send_reminders(bot_instance, today):
         
         sent_count = 0
         for chat_id in feedback_bot.users:
+            # Проверяем настройку admin_as_employee
+            admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", False)
+            
+            # Пропускаем админа если он не включен как сотрудник
+            if chat_id == MANAGER_CHAT_ID and not admin_as_employee:
+                continue
+            
             # Проверяем, ответил ли пользователь
             if chat_id in today_responses:
                 continue
@@ -233,7 +250,11 @@ async def generate_daily_report_async(bot_instance):
             if vacation_users:
                 report += f"❌ Не отправлено:\n• Отпуск: {', '.join(vacation_users)} ({len(vacation_users)} чел.)\n\n"
             
-            total_users = len(feedback_bot.users) - len(vacation_users)
+            # Проверяем настройку admin_as_employee для подсчета
+            admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", False)
+            admin_count = 1 if not admin_as_employee else 0
+            
+            total_users = len(feedback_bot.users) - len(vacation_users) - admin_count
             responded_users = len(responses)
             
             report += f"👥 Ответили: {responded_users} из {total_users}"
@@ -267,9 +288,12 @@ async def generate_daily_report_async(bot_instance):
             
             # Кто не ответил (исключая тех кто в отпуске)
             responded_user_ids = set(responses.keys())
+            admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", False)
+            
             not_responded = [user_id for user_id in feedback_bot.users 
                            if user_id not in responded_user_ids 
-                           and not feedback_bot.is_user_on_vacation(user_id, today_date)]
+                           and not feedback_bot.is_user_on_vacation(user_id, today_date)
+                           and (admin_as_employee or user_id != MANAGER_CHAT_ID)]
             
             if not_responded:
                 report += f"❌ Не ответили ({len(not_responded)}):\n"
@@ -310,7 +334,7 @@ async def send_monthly_reports(bot_instance):
         
         sent_count = 0
         for user_id in feedback_bot.users:
-            # Пропускаем админа
+            # Пропускаем админа (месячные отчеты всегда не отправляются админу)
             if user_id == MANAGER_CHAT_ID:
                 continue
             
@@ -330,10 +354,17 @@ async def send_monthly_reports(bot_instance):
 
 async def scheduler_task(bot_instance):
     """Планировщик задач"""
-    logger.info(f"Планировщик запущен. Опрос: {SURVEY_TIME} МСК, Отчет: {REPORT_TIME} МСК")
+    survey_time = feedback_bot.schedule_settings.get("survey_time", "17:00")
+    report_time = feedback_bot.schedule_settings.get("report_time", "21:00")
+    
+    logger.info(f"Планировщик запущен. Опрос: {survey_time} МСК, Отчет: {report_time} МСК")
     
     while True:
         try:
+            # Перезагружаем настройки на каждой итерации (чтобы подхватить изменения)
+            survey_time = feedback_bot.schedule_settings.get("survey_time", "17:00")
+            report_time = feedback_bot.schedule_settings.get("report_time", "21:00")
+            
             # Ждём до начала следующей минуты
             now = datetime.now(MSK_TZ)
             next_minute = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
@@ -349,12 +380,12 @@ async def scheduler_task(bot_instance):
             logger.debug(f"Текущее время МСК: {current_time}")
             
             # Опрос
-            if current_time == SURVEY_TIME:
+            if current_time == survey_time:
                 logger.info("Запуск ежедневного опроса...")
                 await send_daily_survey_async(bot_instance)
             
             # Отчет
-            elif current_time == REPORT_TIME:
+            elif current_time == report_time:
                 logger.info("Запуск формирования отчета...")
                 await generate_daily_report_async(bot_instance)
             
@@ -427,6 +458,11 @@ async def main():
         dp.message.register(reminders_set_command, F.text.startswith('/reminders '))
         dp.message.register(reminders_command, Command('reminders'))
         
+        # Команды расписания
+        dp.message.register(setsurvey_command, F.text.startswith('/setsurvey '))
+        dp.message.register(setreport_command, F.text.startswith('/setreport '))
+        dp.message.register(adminsurvey_command, F.text.startswith('/adminsurvey '))
+        
         # Команды выходных и отпусков
         dp.message.register(saturday_command, F.text.startswith('/saturday '))
         dp.message.register(sunday_command, F.text.startswith('/sunday '))
@@ -466,9 +502,12 @@ async def main():
         # Запускаем планировщик как фоновую задачу
         scheduler_task_handle = asyncio.create_task(scheduler_task(bot))
         
+        survey_time = feedback_bot.schedule_settings.get("survey_time", "17:00")
+        report_time = feedback_bot.schedule_settings.get("report_time", "21:00")
+        
         logger.info("🚀 Бот запущен и готов к работе!")
-        logger.info(f"📅 Опрос: {SURVEY_TIME} МСК")
-        logger.info(f"📊 Отчет: {REPORT_TIME} МСК")
+        logger.info(f"📅 Опрос: {survey_time} МСК")
+        logger.info(f"📊 Отчет: {report_time} МСК")
         logger.info(f"📊 Месячные отчеты: 1-го числа в 09:00 МСК")
         
         # Запускаем бота

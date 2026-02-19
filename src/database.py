@@ -6,7 +6,7 @@ from datetime import datetime, date
 from workalendar.europe import Russia
 from config import (
     USER_DATA_FILE, RESPONSES_FILE, REMINDER_SETTINGS_FILE, HOLIDAYS_FILE,
-    logger
+    SCHEDULE_SETTINGS_FILE, logger
 )
 
 # Производственный календарь РФ
@@ -19,6 +19,7 @@ class FeedbackBot:
         self.responses = self.load_responses()
         self.reminder_settings = self.load_reminder_settings()
         self.holidays_settings = self.load_holidays_settings()
+        self.schedule_settings = self.load_schedule_settings()
         self.reminder_tasks = {}  # Хранение задач напоминаний
     
     def load_users(self):
@@ -109,6 +110,34 @@ class FeedbackBot:
             logger.info("Настройки выходных и отпусков сохранены")
         except Exception as e:
             logger.error(f"Ошибка сохранения holidays.json: {e}")
+    
+    def load_schedule_settings(self):
+        """Загружает настройки расписания (время опроса и отчета)"""
+        try:
+            if SCHEDULE_SETTINGS_FILE.exists():
+                with open(SCHEDULE_SETTINGS_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            else:
+                logger.info("Создаю файл schedule_settings.json с дефолтными настройками")
+                default = {
+                    "survey_time": "17:00",
+                    "report_time": "21:00",
+                    "admin_as_employee": False
+                }
+                self.save_schedule_settings(default)
+                return default
+        except Exception as e:
+            logger.error(f"Ошибка загрузки schedule_settings.json: {e}")
+            return {"survey_time": "17:00", "report_time": "21:00", "admin_as_employee": False}
+    
+    def save_schedule_settings(self, settings):
+        """Сохраняет настройки расписания"""
+        try:
+            with open(SCHEDULE_SETTINGS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, ensure_ascii=False, indent=2)
+            logger.info("Настройки расписания сохранены")
+        except Exception as e:
+            logger.error(f"Ошибка сохранения schedule_settings.json: {e}")
     
     def is_working_day(self, check_date):
         """Проверяет, является ли день рабочим"""

@@ -13,7 +13,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from config import (
-    MANAGER_CHAT_ID, SURVEY_TIME, REPORT_TIME, MSK_TZ, MOOD_OPTIONS,
+    MANAGER_CHAT_ID, MSK_TZ, MOOD_OPTIONS,
     REPORTS_DIR, logger
 )
 from database import feedback_bot, calendar
@@ -60,6 +60,9 @@ async def start_command(message: Message):
     feedback_bot.save_users()
     
     if chat_id == MANAGER_CHAT_ID:
+        survey_time = feedback_bot.schedule_settings.get("survey_time", "17:00")
+        report_time = feedback_bot.schedule_settings.get("report_time", "21:00")
+        
         welcome_message = (
             f"👑 Добро пожаловать, {user.first_name}!\n\n"
             "Вы вошли как *администратор*\n\n"
@@ -83,17 +86,19 @@ async def start_command(message: Message):
             "• `/test` - тестовый опрос\n"
             "• `/help` - полная справка\n\n"
             "⏰ **Автоматика:**\n"
-            f"• {SURVEY_TIME} МСК - опрос\n"
-            f"• {REPORT_TIME} МСК - отчет\n\n"
+            f"• {survey_time} МСК - опрос\n"
+            f"• {report_time} МСК - отчет\n\n"
             f"🆔 ID: `{chat_id}`"
         )
     else:
+        survey_time = feedback_bot.schedule_settings.get("survey_time", "17:00")
+        
         welcome_message = (
             f"👋 Привет, {user.first_name}!\n\n"
-            f"Я буду каждый день в {SURVEY_TIME} спрашивать, как прошел твой рабочий день.\n"
+            f"Я буду каждый день в {survey_time} спрашивать, как прошел твой рабочий день.\n"
             "Это займет всего пару секунд и поможет улучшить рабочие процессы!\n\n"
             "📝 **Как это работает:**\n"
-            f"1. В {SURVEY_TIME} я пришлю вопрос с вариантами ответа\n"
+            f"1. В {survey_time} я пришлю вопрос с вариантами ответа\n"
             "2. Выберите смайлик, соответствующий вашему настроению\n"
             "3. Напишите, над каким проектом работали\n"
             "4. Готово! Спасибо за участие 😊\n\n"
@@ -101,7 +106,7 @@ async def start_command(message: Message):
             "• `/test` - попробовать опрос прямо сейчас\n"
             "• `/mymonth` - мой отчет за прошлый месяц\n"
             "• `/help` - помощь\n\n"
-            f"Увидимся в {SURVEY_TIME}! 🕐"
+            f"Увидимся в {survey_time}! 🕐"
         )
     
     await message.answer(welcome_message, parse_mode='Markdown', reply_markup=admin_keyboard if chat_id == MANAGER_CHAT_ID else None)
@@ -112,6 +117,9 @@ async def help_command(message: Message):
     user_id = str(message.from_user.id)
     
     if user_id == MANAGER_CHAT_ID:
+        survey_time = feedback_bot.schedule_settings.get("survey_time", "17:00")
+        report_time = feedback_bot.schedule_settings.get("report_time", "21:00")
+        
         # Помощь для администратора
         help_message = (
             "👑 **Справка для администратора**\n\n"
@@ -139,12 +147,18 @@ async def help_command(message: Message):
             "• `/vacation @user ДД.ММ.ГГГГ-ДД.ММ.ГГГГ` - назначить отпуск\n"
             "• `/vacations` - список отпусков\n"
             "• `/removevacation @user` - отменить отпуск\n\n"
+            "⏰ **Расписание:**\n"
+            "• `/setsurvey ЧЧ:ММ` - изменить время опроса\n"
+            "• `/setreport ЧЧ:ММ` - изменить время отчета\n"
+            "• `/adminsurvey on/off` - включить/отключить опросы для админа\n\n"
             "📊 **Автоматические процессы:**\n"
-            f"• **{SURVEY_TIME} МСК** - автоматический опрос всех сотрудников\n"
-            f"• **{REPORT_TIME} МСК** - автоматический отчет + CSV файл\n"
+            f"• **{survey_time} МСК** - автоматический опрос всех сотрудников\n"
+            f"• **{report_time} МСК** - автоматический отчет + CSV файл\n"
             "• **01 число каждого месяца** - месячные отчеты сотрудникам"
         )
     else:
+        survey_time = feedback_bot.schedule_settings.get("survey_time", "17:00")
+        
         # Помощь для сотрудника
         help_message = (
             "👋 **Справка для сотрудника**\n\n"
@@ -154,7 +168,7 @@ async def help_command(message: Message):
             "• `/mymonth` - мой отчет за прошлый месяц\n"
             "• `/help` - эта справка\n\n"
             "📝 **Как проходит опрос:**\n"
-            f"1. **{SURVEY_TIME} МСК** - я пришлю вопрос о вашем дне\n"
+            f"1. **{survey_time} МСК** - я пришлю вопрос о вашем дне\n"
             "2. Выберите смайлик, соответствующий настроению:\n"
             "   👍 Отлично • 👌 Нормально • 😔 Не очень\n"
             "   😓 Тяжело • 😭 Критично\n"
@@ -182,6 +196,9 @@ async def menu_button_handler(message: Message):
     if user_id != MANAGER_CHAT_ID:
         return
     
+    survey_time = feedback_bot.schedule_settings.get("survey_time", "17:00")
+    report_time = feedback_bot.schedule_settings.get("report_time", "21:00")
+    
     # Отправляем структурированное меню
     welcome_message = (
         f"👑 Меню администратора\n\n"
@@ -205,8 +222,8 @@ async def menu_button_handler(message: Message):
         "• `/test` - тестовый опрос\n"
         "• `/help` - полная справка\n\n"
         "⏰ **Автоматика:**\n"
-        f"• {SURVEY_TIME} МСК - опрос\n"
-        f"• {REPORT_TIME} МСК - отчет"
+        f"• {survey_time} МСК - опрос\n"
+        f"• {report_time} МСК - отчет"
     )
     
     await message.answer(welcome_message, parse_mode='Markdown', reply_markup=admin_keyboard)
@@ -306,7 +323,8 @@ async def project_message(message: Message, state: FSMContext):
     await state.clear()
     feedback_bot.save_responses()
     
-    await message.answer(f"Спасибо за обратную связь! 👍\nУвидимся завтра в {SURVEY_TIME}.")
+    survey_time = feedback_bot.schedule_settings.get("survey_time", "17:00")
+    await message.answer(f"Спасибо за обратную связь! 👍\nУвидимся завтра в {survey_time}.")
 
 
 # ============================================================================
@@ -551,18 +569,26 @@ async def schedule_command(message: Message):
     current_time_msk = datetime.now(MSK_TZ).strftime('%H:%M:%S')
     current_date = datetime.now(MSK_TZ).strftime('%d.%m.%Y')
     
+    # Получаем настройки расписания
+    survey_time = feedback_bot.schedule_settings.get("survey_time", "17:00")
+    report_time = feedback_bot.schedule_settings.get("report_time", "21:00")
+    admin_as_employee = feedback_bot.schedule_settings.get("admin_as_employee", False)
+    
     # Статус напоминаний
     reminders_enabled = feedback_bot.reminder_settings.get("enabled", True)
     reminder_times = feedback_bot.reminder_settings.get("times", [])
     reminders_status = "✅ Включены" if reminders_enabled else "❌ Отключены"
+    
+    # Статус админа
+    admin_status = "✅ Включен" if admin_as_employee else "❌ Отключен"
     
     schedule_message = (
         f"🕐 **Текущее расписание**\n\n"
         f"📅 Сегодня: {current_date}\n"
         f"🕐 Сейчас: {current_time_msk} МСК\n\n"
         f"⏰ **Автоматические задачи:**\n"
-        f"• **Опрос сотрудников:** {SURVEY_TIME} МСК\n"
-        f"• **Отчет менеджеру:** {REPORT_TIME} МСК\n\n"
+        f"• **Опрос сотрудников:** {survey_time} МСК\n"
+        f"• **Отчет менеджеру:** {report_time} МСК\n\n"
         f"🔔 **Напоминания:** {reminders_status}\n"
     )
     
@@ -570,13 +596,12 @@ async def schedule_command(message: Message):
         schedule_message += f"• Время: {', '.join(reminder_times)}\n"
     
     schedule_message += (
-        f"\n⚙️ **Настройка:**\n"
-        f"Для изменения времени отредактируйте файл `.env`:\n"
-        f"```\n"
-        f"SURVEY_TIME={SURVEY_TIME}\n"
-        f"REPORT_TIME={REPORT_TIME}\n"
-        f"```\n"
-        f"После изменения перезапустите бота."
+        f"\n👤 **Администратор как сотрудник:** {admin_status}\n"
+        f"\n⚙️ **Изменение расписания:**\n"
+        f"• `/setsurvey ЧЧ:ММ` - изменить время опроса\n"
+        f"• `/setreport ЧЧ:ММ` - изменить время отчета\n"
+        f"• `/adminsurvey on/off` - включить/отключить опросы для админа\n\n"
+        f"Изменения применяются сразу, перезапуск не требуется."
     )
     
     await message.answer(schedule_message, parse_mode='Markdown')
@@ -1811,3 +1836,118 @@ async def generate_user_monthly_report(user_id, year, month):
     except Exception as e:
         logger.error(f"Ошибка генерации месячного отчета: {e}")
         return "❌ Ошибка при формировании отчета"
+
+
+# ============================================================================
+# КОМАНДЫ УПРАВЛЕНИЯ РАСПИСАНИЕМ
+# ============================================================================
+
+async def setsurvey_command(message: Message):
+    """Команда для изменения времени опроса (только для админа)"""
+    user_id = str(message.from_user.id)
+    
+    if user_id != MANAGER_CHAT_ID:
+        await message.answer("❌ Эта команда доступна только администратору.")
+        return
+    
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("❌ Используйте: `/setsurvey ЧЧ:ММ`\n\nНапример: `/setsurvey 18:00`", parse_mode='Markdown')
+        return
+    
+    new_time = args[1].strip()
+    
+    # Валидация формата времени
+    try:
+        datetime.strptime(new_time, '%H:%M')
+    except ValueError:
+        await message.answer("❌ Неверный формат времени. Используйте формат ЧЧ:ММ\n\nНапример: `18:00`", parse_mode='Markdown')
+        return
+    
+    # Сохраняем новое время
+    feedback_bot.schedule_settings["survey_time"] = new_time
+    feedback_bot.save_schedule_settings(feedback_bot.schedule_settings)
+    
+    await message.answer(
+        f"✅ Время опроса изменено на {new_time} МСК\n\n"
+        f"Изменения вступят в силу немедленно, перезапуск не требуется."
+    )
+    
+    logger.info(f"Администратор изменил время опроса на {new_time}")
+
+
+async def setreport_command(message: Message):
+    """Команда для изменения времени отчета (только для админа)"""
+    user_id = str(message.from_user.id)
+    
+    if user_id != MANAGER_CHAT_ID:
+        await message.answer("❌ Эта команда доступна только администратору.")
+        return
+    
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("❌ Используйте: `/setreport ЧЧ:ММ`\n\nНапример: `/setreport 22:00`", parse_mode='Markdown')
+        return
+    
+    new_time = args[1].strip()
+    
+    # Валидация формата времени
+    try:
+        datetime.strptime(new_time, '%H:%M')
+    except ValueError:
+        await message.answer("❌ Неверный формат времени. Используйте формат ЧЧ:ММ\n\nНапример: `22:00`", parse_mode='Markdown')
+        return
+    
+    # Сохраняем новое время
+    feedback_bot.schedule_settings["report_time"] = new_time
+    feedback_bot.save_schedule_settings(feedback_bot.schedule_settings)
+    
+    await message.answer(
+        f"✅ Время отчета изменено на {new_time} МСК\n\n"
+        f"Изменения вступят в силу немедленно, перезапуск не требуется."
+    )
+    
+    logger.info(f"Администратор изменил время отчета на {new_time}")
+
+
+async def adminsurvey_command(message: Message):
+    """Команда для включения/выключения опросов для администратора"""
+    user_id = str(message.from_user.id)
+    
+    if user_id != MANAGER_CHAT_ID:
+        await message.answer("❌ Эта команда доступна только администратору.")
+        return
+    
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("❌ Используйте: `/adminsurvey on` или `/adminsurvey off`", parse_mode='Markdown')
+        return
+    
+    action = args[1].lower()
+    
+    if action == "on":
+        feedback_bot.schedule_settings["admin_as_employee"] = True
+        feedback_bot.save_schedule_settings(feedback_bot.schedule_settings)
+        await message.answer(
+            "✅ Администратор включен как сотрудник\n\n"
+            "Теперь вы будете:\n"
+            "• Получать ежедневные опросы\n"
+            "• Учитываться в статистике и отчетах\n"
+            "• Получать напоминания (если не ответили)"
+        )
+        logger.info("Администратор включил себя как сотрудника")
+        
+    elif action == "off":
+        feedback_bot.schedule_settings["admin_as_employee"] = False
+        feedback_bot.save_schedule_settings(feedback_bot.schedule_settings)
+        await message.answer(
+            "❌ Администратор исключен из сотрудников\n\n"
+            "Теперь вы:\n"
+            "• НЕ будете получать ежедневные опросы\n"
+            "• НЕ будете учитываться в статистике\n"
+            "• НЕ будете получать напоминания"
+        )
+        logger.info("Администратор исключил себя из сотрудников")
+        
+    else:
+        await message.answer("❌ Используйте: `/adminsurvey on` или `/adminsurvey off`", parse_mode='Markdown')
