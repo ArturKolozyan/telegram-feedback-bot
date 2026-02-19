@@ -1,0 +1,205 @@
+{
+  "5356475327": {
+    "username": "ArturKolozyan",
+    "first_name": "Артур",
+    "last_name": "Колозян",
+    "registered_at": "2026-02-19T19:03:38.100833+03:00",
+    "is_admin": true
+  },
+  "1111111111": {
+    "username": "ivanov_ivan",
+    "first_name": "Иван",
+    "last_name": "Иванов",
+    "registered_at": "2026-01-10T09:00:00+03:00",
+    "is_admin": false
+  },
+  "2222222222": {
+    "username": "petrova_maria",
+    "first_name": "Мария",
+    "last_name": "Петрова",
+    "registered_at": "2026-01-10T09:00:00+03:00",
+    "is_admin": false
+  },
+  "3333333333": {
+    "username": "sidorov_alex",
+    "first_name": "Александр",
+    "last_name": "Сидоров",
+    "registered_at": "2026-01-10T09:00:00+03:00",
+    "is_admin": false
+  },
+  "4444444444": {
+    "username": "kuznetsov_dmitry",
+    "first_name": "Дмитрий",
+    "last_name": "Кузнецов",
+    "registered_at": "2026-01-11T09:00:00+03:00",
+    "is_admin": false
+  },
+  "5555555555": {
+    "username": "smirnova_elena",
+    "first_name": "Елена",
+    "last_name": "Смирнова",
+    "registered_at": "2026-01-11T09:00:00+03:00",
+    "is_admin": false
+  },
+  "6666666666": {
+    "username": "popov_sergey",
+    "first_name": "Сергей",
+    "last_name": "Попов",
+    "registered_at": "2026-01-11T09:00:00+03:00",
+    "is_admin": false
+  },
+  "7777777777": {
+    "username": "sokolova_anna",
+    "first_name": "Анна",
+    "last_name": "Соколова",
+    "registered_at": "2026-01-12T09:00:00+03:00",
+    "is_admin": false
+  },
+  "8888888888": {
+    "username": "lebedev_mikhail",
+    "first_name": "Михаил",
+    "last_name": "Лебедев",
+    "registered_at": "2026-01-12T09:00:00+03:00",
+    "is_admin": false
+  },
+  "9999999999": {
+    "username": "novikova_olga",
+    "first_name": "Ольга",
+    "last_name": "Новикова",
+    "registered_at": "2026-01-12T09:00:00+03:00",
+    "is_admin": false
+  },
+  "1010101010": {
+    "username": "morozov_andrey",
+    "first_name": "Андрей",
+    "last_name": "Морозов",
+    "registered_at": "2026-01-13T09:00:00+03:00",
+    "is_admin": false
+  },
+  "1212121212": {
+    "username": "volkov_pavel",
+    "first_name": "Павел",
+    "last_name": "Волков",
+    "registered_at": "2026-01-13T09:00:00+03:00",
+    "is_admin": false
+  },
+  "1313131313": {
+    "username": "solovyova_tatyana",
+    "first_name": "Татьяна",
+    "last_name": "Соловьёва",
+    "registered_at": "2026-01-13T09:00:00+03:00",
+    "is_admin": false
+  },
+  "1414141414": {
+    "username": "vasiliev_igor",
+    "first_name": "Игорь",
+    "last_name": "Васильев",
+    "registered_at": "2026-01-14T09:00:00+03:00",
+    "is_admin": false
+  },
+  "1515151515": {
+    "username": "zaitseva_natalia",
+    "first_name": "Наталья",
+    "last_name": "Зайцева",
+    "registered_at": "2026-01-14T09:00:00+03:00",
+    "is_admin": false
+  },
+  "1616161616": {
+    "username": "pavlov_roman",
+    "first_name": "Роман",
+    "last_name": "Павлов",
+    "registered_at": "2026-01-14T09:00:00+03:00",
+    "is_admin": false
+  },
+  "1717171717": {
+    "username": "semenova_victoria",
+    "first_name": "Виктория",
+    "last_name": "Семёнова",
+    "registered_at": "2026-01-15T09:00:00+03:00",
+    "is_admin": false
+  },
+  "1818181818": {
+    "username": "golubev_maxim",
+    "first_name": "Максим",
+    "last_name": "Голубев",
+    "registered_at": "2026-01-15T09:00:00+03:00",
+    "is_admin": false
+  },
+  "1919191919": {
+    "username": "vinogradova_julia",
+    "first_name": "Юлия",
+    "last_name": "Виноградова",
+    "registered_at": "2026-01-15T09:00:00+03:00",
+    "is_admin": false
+  },
+  "2020202020": {
+    "username": "bogdanov_konstantin",
+    "first_name": "Константин",
+    "last_name": "Богданов",
+    "registered_at": "2026-01-16T09:00:00+03:00",
+    "is_admin": false
+  },
+  "2121212121": {
+    "username": "vorobyova_svetlana",
+    "first_name": "Светлана",
+    "last_name": "Воробьёва",
+    "registered_at": "2026-01-16T09:00:00+03:00",
+    "is_admin": false
+  },
+  "2424242424": {
+    "username": "mikhailova_ekaterina",
+    "first_name": "Екатерина",
+    "last_name": "Михайлова",
+    "registered_at": "2026-01-17T09:00:00+03:00",
+    "is_admin": false
+  },
+  "2525252525": {
+    "username": "belov_nikolay",
+    "first_name": "Николай",
+    "last_name": "Белов",
+    "registered_at": "2026-01-17T09:00:00+03:00",
+    "is_admin": false
+  },
+  "2626262626": {
+    "username": "stepanova_irina",
+    "first_name": "Ирина",
+    "last_name": "Степанова",
+    "registered_at": "2026-01-17T09:00:00+03:00",
+    "is_admin": false
+  },
+  "2727272727": {
+    "username": "nikitin_vladimir",
+    "first_name": "Владимир",
+    "last_name": "Никитин",
+    "registered_at": "2026-01-18T09:00:00+03:00",
+    "is_admin": false
+  },
+  "2828282828": {
+    "username": "egorova_daria",
+    "first_name": "Дарья",
+    "last_name": "Егорова",
+    "registered_at": "2026-01-18T09:00:00+03:00",
+    "is_admin": false
+  },
+  "2929292929": {
+    "username": "gromov_stanislav",
+    "first_name": "Станислав",
+    "last_name": "Громов",
+    "registered_at": "2026-01-18T09:00:00+03:00",
+    "is_admin": false
+  },
+  "3030303030": {
+    "username": "tikhonova_vera",
+    "first_name": "Вера",
+    "last_name": "Тихонова",
+    "registered_at": "2026-01-19T09:00:00+03:00",
+    "is_admin": false
+  },
+  "3131313131": {
+    "username": "kovalev_denis",
+    "first_name": "Денис",
+    "last_name": "Ковалёв",
+    "registered_at": "2026-01-19T09:00:00+03:00",
+    "is_admin": false
+  }
+}

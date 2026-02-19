@@ -23,11 +23,16 @@ from commands import (
     stats_command, schedule_command, save_report_to_csv, send_csv_file,
     # Управление пользователями
     users_command, delete_user_callback, confirm_delete_callback,
+    users_page_callback, show_users_page,
     # Напоминания
     reminders_command, reminders_set_command,
     # Выходные и отпуска
     weekends_command, saturday_command, sunday_command, holidays_command,
     vacation_command, vacations_command, removevacation_command,
+    vacation_page_callback, vacation_select_callback, vacation_dates_handler, 
+    vacation_edit_callback, vacation_cancel_callback, vacation_edit_dates_handler,
+    vacations_page_callback, vacations_delete_callback, confirm_vacations_delete_callback,
+    VacationStates, show_vacation_page,
     # Месячные отчеты
     mymonth_command
 )
@@ -48,6 +53,9 @@ async def send_daily_survey_async(bot_instance):
         return
     
     try:
+        # Автоматически удаляем завершенные отпуска
+        feedback_bot.cleanup_expired_vacations()
+        
         today = datetime.now(MSK_TZ).strftime('%Y-%m-%d')
         today_date = datetime.now(MSK_TZ).date()
         
@@ -56,7 +64,9 @@ async def send_daily_survey_async(bot_instance):
             logger.info(f"Сегодня выходной/праздник ({today}), опросы не отправляются")
             return
         
-        feedback_bot.responses[today] = {}
+        # Инициализируем responses для сегодня если еще нет
+        if today not in feedback_bot.responses:
+            feedback_bot.responses[today] = {}
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
@@ -386,6 +396,10 @@ async def main():
         bot = Bot(token=BOT_TOKEN)
         dp = Dispatcher(storage=MemoryStorage())
         
+        # Автоматически удаляем завершенные отпуска при запуске
+        feedback_bot.cleanup_expired_vacations()
+        logger.info("Проверка и очистка завершенных отпусков выполнена")
+        
         # Создаем async обертки для команд с bot_instance
         async def report_wrapper(m):
             await report_command(m, bot)
@@ -416,7 +430,7 @@ async def main():
         # Команды выходных и отпусков
         dp.message.register(saturday_command, F.text.startswith('/saturday '))
         dp.message.register(sunday_command, F.text.startswith('/sunday '))
-        dp.message.register(vacation_command, F.text.startswith('/vacation '))
+        dp.message.register(vacation_command, Command('vacation'))
         dp.message.register(removevacation_command, F.text.startswith('/removevacation '))
         dp.message.register(weekends_command, Command('weekends'))
         dp.message.register(holidays_command, Command('holidays'))
@@ -430,9 +444,24 @@ async def main():
         dp.callback_query.register(delete_user_callback, F.data.startswith('delete_user_'))
         dp.callback_query.register(confirm_delete_callback, F.data.startswith('confirm_delete_'))
         dp.callback_query.register(confirm_delete_callback, F.data == 'cancel_delete')
+        dp.callback_query.register(users_page_callback, F.data.startswith('users_page_'))
+        
+        # Callback обработчики для отпусков
+        dp.callback_query.register(vacation_page_callback, F.data.startswith('vacation_page_'))
+        dp.callback_query.register(vacation_select_callback, F.data.startswith('vacation_select_'))
+        dp.callback_query.register(vacation_edit_callback, F.data.startswith('vacation_edit_'))
+        dp.callback_query.register(vacation_cancel_callback, F.data == 'vacation_cancel')
+        dp.callback_query.register(vacations_page_callback, F.data.startswith('vacations_page_'))
+        dp.callback_query.register(vacations_delete_callback, F.data.startswith('vacations_delete_'))
+        dp.callback_query.register(confirm_vacations_delete_callback, F.data.startswith('confirm_vacations_delete_'))
+        dp.callback_query.register(confirm_vacations_delete_callback, F.data == 'cancel_vacations_delete')
         
         # Обработчик текстовых сообщений для проекта (только в состоянии waiting_for_project)
         dp.message.register(project_message, FeedbackStates.waiting_for_project)
+        
+        # Обработчики ввода дат отпуска
+        dp.message.register(vacation_dates_handler, VacationStates.waiting_for_dates)
+        dp.message.register(vacation_edit_dates_handler, VacationStates.waiting_for_edit_dates)
         
         # Запускаем планировщик как фоновую задачу
         scheduler_task_handle = asyncio.create_task(scheduler_task(bot))

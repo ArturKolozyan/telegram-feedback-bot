@@ -23,6 +23,10 @@ from database import feedback_bot, calendar
 class FeedbackStates(StatesGroup):
     waiting_for_project = State()
 
+class VacationStates(StatesGroup):
+    waiting_for_dates = State()
+    waiting_for_edit_dates = State()
+
 
 # Клавиатура для администратора
 admin_keyboard = ReplyKeyboardMarkup(
@@ -59,25 +63,29 @@ async def start_command(message: Message):
         welcome_message = (
             f"👑 Добро пожаловать, {user.first_name}!\n\n"
             "Вы вошли как *администратор*\n\n"
-            "🔧 **Доступные команды:**\n"
-            "• `/report` - получить отчет за сегодня\n"
-            "• `/createreport` - создать отчет (перезапишет старый)\n"
-            "• `/download` - скачать CSV файл за сегодня\n"
-            "• `/download ДД.ММ.ГГГГ` - скачать за конкретную дату\n"
+            "📊 **ОТЧЕТЫ И СТАТИСТИКА**\n"
+            "• `/report` - отчет за сегодня\n"
+            "• `/createreport` - создать отчет заново\n"
+            "• `/download` - скачать CSV за сегодня\n"
+            "• `/download ДД.ММ.ГГГГ` - CSV за дату\n"
             "• `/reports` - список всех отчетов\n"
-            "• `/users` - управление пользователями\n"
-            "• `/stats` - статистика по боту\n"
-            "• `/test` - тестовый опрос\n"
-            "• `/schedule` - текущее расписание\n"
-            "• `/reminders` - настройки напоминаний\n"
-            "• `/weekends` - настройки выходных\n"
+            "• `/stats` - статистика по боту\n\n"
+            "👥 **УПРАВЛЕНИЕ СОТРУДНИКАМИ**\n"
+            "• `/users` - список и удаление\n"
+            "• `/vacation` - назначить отпуск\n"
+            "• `/vacations` - список отпусков\n\n"
+            "⚙️ **НАСТРОЙКИ**\n"
+            "• `/reminders` - напоминания\n"
+            "• `/weekends` - выходные дни\n"
             "• `/holidays` - праздники РФ\n"
-            "• `/vacations` - список отпусков\n"
-            "• `/help` - помощь по командам\n\n"
-            "📊 **Автоматическое расписание:**\n"
-            f"• {SURVEY_TIME} МСК - опрос сотрудников\n"
-            f"• {REPORT_TIME} МСК - отчет + CSV файл вам в личные сообщения\n\n"
-            f"🆔 Ваш Chat ID: `{chat_id}`"
+            "• `/schedule` - расписание\n\n"
+            "🔧 **ПРОЧЕЕ**\n"
+            "• `/test` - тестовый опрос\n"
+            "• `/help` - полная справка\n\n"
+            "⏰ **Автоматика:**\n"
+            f"• {SURVEY_TIME} МСК - опрос\n"
+            f"• {REPORT_TIME} МСК - отчет\n\n"
+            f"🆔 ID: `{chat_id}`"
         )
     else:
         welcome_message = (
@@ -175,27 +183,31 @@ async def menu_button_handler(message: Message):
     if user_id != MANAGER_CHAT_ID:
         return
     
-    # Отправляем то же сообщение что и при /start
+    # Отправляем структурированное меню
     welcome_message = (
         f"👑 Меню администратора\n\n"
-        "🔧 **Доступные команды:**\n"
-        "• `/report` - получить отчет за сегодня\n"
-        "• `/createreport` - создать отчет (перезапишет старый)\n"
-        "• `/download` - скачать CSV файл за сегодня\n"
-        "• `/download ДД.ММ.ГГГГ` - скачать за конкретную дату\n"
+        "📊 **ОТЧЕТЫ И СТАТИСТИКА**\n"
+        "• `/report` - отчет за сегодня\n"
+        "• `/createreport` - создать отчет заново\n"
+        "• `/download` - скачать CSV за сегодня\n"
+        "• `/download ДД.ММ.ГГГГ` - CSV за дату\n"
         "• `/reports` - список всех отчетов\n"
-        "• `/users` - управление пользователями\n"
-        "• `/stats` - статистика по боту\n"
-        "• `/test` - тестовый опрос\n"
-        "• `/schedule` - текущее расписание\n"
-        "• `/reminders` - настройки напоминаний\n"
-        "• `/weekends` - настройки выходных\n"
+        "• `/stats` - статистика по боту\n\n"
+        "👥 **УПРАВЛЕНИЕ СОТРУДНИКАМИ**\n"
+        "• `/users` - список и удаление\n"
+        "• `/vacation` - назначить отпуск\n"
+        "• `/vacations` - список отпусков\n\n"
+        "⚙️ **НАСТРОЙКИ**\n"
+        "• `/reminders` - напоминания\n"
+        "• `/weekends` - выходные дни\n"
         "• `/holidays` - праздники РФ\n"
-        "• `/vacations` - список отпусков\n"
-        "• `/help` - помощь по командам\n\n"
-        "📊 **Автоматическое расписание:**\n"
-        f"• {SURVEY_TIME} МСК - опрос сотрудников\n"
-        f"• {REPORT_TIME} МСК - отчет + CSV файл вам в личные сообщения"
+        "• `/schedule` - расписание\n\n"
+        "🔧 **ПРОЧЕЕ**\n"
+        "• `/test` - тестовый опрос\n"
+        "• `/help` - полная справка\n\n"
+        "⏰ **Автоматика:**\n"
+        f"• {SURVEY_TIME} МСК - опрос\n"
+        f"• {REPORT_TIME} МСК - отчет"
     )
     
     await message.answer(welcome_message, parse_mode='Markdown', reply_markup=admin_keyboard)
@@ -577,67 +589,100 @@ async def schedule_command(message: Message):
 # ============================================================================
 
 async def users_command(message: Message):
-    """Команда для просмотра списка пользователей с возможностью удаления (только для админа)"""
+    """Команда для просмотра списка пользователей с пагинацией"""
     user_id = str(message.from_user.id)
-    
+
     if user_id != MANAGER_CHAT_ID:
         await message.answer("❌ Эта команда доступна только администратору.")
         return
-    
+
     if not feedback_bot.users:
         await message.answer("👥 Пользователей пока нет.")
         return
+
+    # Показываем первую страницу
+    await show_users_page(message, page=0)
+
+
+async def show_users_page(message_or_callback, page=0, edit=False):
+    """Показывает страницу со списком пользователей"""
+    USERS_PER_PAGE = 10
     
-    # Считаем статистику для каждого пользователя
-    total_days = len(feedback_bot.responses)
+    # Получаем список пользователей (исключая админа)
+    users_list = [(uid, data) for uid, data in feedback_bot.users.items() if uid != MANAGER_CHAT_ID]
+    total_users = len(users_list)
+    total_pages = (total_users + USERS_PER_PAGE - 1) // USERS_PER_PAGE
     
-    users_text = f"👥 Пользователи ({len(feedback_bot.users)}):\n\n"
-    keyboard_buttons = []
-    
-    for chat_id, user_data in feedback_bot.users.items():
-        username = user_data.get('username', 'Неизвестный')
-        first_name = user_data.get('first_name', 'Неизвестный')
-        is_admin = user_data.get('is_admin', False)
-        registered_at = user_data.get('registered_at', '')
+    if total_pages == 0:
+        text = "👥 Нет сотрудников для управления"
+        keyboard = None
+    else:
+        # Ограничиваем страницу
+        page = max(0, min(page, total_pages - 1))
         
-        # Форматируем дату регистрации
-        try:
-            reg_date = datetime.fromisoformat(registered_at.replace('Z', '+00:00'))
-            reg_formatted = reg_date.strftime('%d.%m.%Y')
-        except:
-            reg_formatted = 'Неизвестно'
+        # Получаем пользователей для текущей страницы
+        start_idx = page * USERS_PER_PAGE
+        end_idx = start_idx + USERS_PER_PAGE
+        page_users = users_list[start_idx:end_idx]
         
-        # Считаем количество ответов пользователя
-        user_responses = 0
-        for day_responses in feedback_bot.responses.values():
-            if chat_id in day_responses:
-                user_responses += 1
+        # Формируем текст
+        total_days = len(feedback_bot.responses)
+        text = f"👥 Пользователи ({total_users})\n"
+        text += f"Страница {page + 1} из {total_pages}\n\n"
         
-        # Процент участия
-        participation = (user_responses / total_days * 100) if total_days > 0 else 0
+        keyboard_buttons = []
         
-        # Формируем текст для пользователя
-        status = "👑 админ" if is_admin else "👤 сотрудник"
-        users_text += f"{first_name} (@{username}) - {status}\n"
-        users_text += f"📅 Зарегистрирован: {reg_formatted}\n"
-        users_text += f"📊 Ответов: {user_responses}/{total_days} ({participation:.0f}%)\n"
-        
-        # Добавляем кнопку удаления (кроме самого админа)
-        if chat_id != MANAGER_CHAT_ID:
+        for idx, (chat_id, user_data) in enumerate(page_users, start=start_idx + 1):
+            username = user_data.get('username', 'Неизвестный')
+            first_name = user_data.get('first_name', 'Неизвестный')
+            
+            # Считаем ответы
+            user_responses = sum(1 for day_resp in feedback_bot.responses.values() if chat_id in day_resp)
+            participation = (user_responses / total_days * 100) if total_days > 0 else 0
+            
+            text += f"{idx}. {first_name} (@{username})\n"
+            text += f"   📊 Ответов: {user_responses}/{total_days} ({participation:.0f}%)\n\n"
+            
+            # Кнопка удаления
             keyboard_buttons.append([
                 InlineKeyboardButton(
-                    text=f"❌ Удалить {first_name}",
+                    text=f"❌ {idx}. {first_name}",
                     callback_data=f"delete_user_{chat_id}"
                 )
             ])
-            users_text += "\n"
-        else:
-            users_text += "🔒 Нельзя удалить\n\n"
+        
+        # Кнопки навигации
+        nav_buttons = []
+        if page > 0:
+            nav_buttons.append(InlineKeyboardButton(text="◀️ Назад", callback_data=f"users_page_{page-1}"))
+        nav_buttons.append(InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="users_page_current"))
+        if page < total_pages - 1:
+            nav_buttons.append(InlineKeyboardButton(text="Вперед ▶️", callback_data=f"users_page_{page+1}"))
+        
+        keyboard_buttons.append(nav_buttons)
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
     
-    # Создаем клавиатуру
-    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons) if keyboard_buttons else None
+    # Отправляем или редактируем сообщение
+    if edit and isinstance(message_or_callback, CallbackQuery):
+        await message_or_callback.message.edit_text(text, reply_markup=keyboard)
+    else:
+        msg = message_or_callback if isinstance(message_or_callback, Message) else message_or_callback.message
+        await msg.answer(text, reply_markup=keyboard)
+
+
+async def users_page_callback(callback: CallbackQuery):
+    """Обработчик переключения страниц пользователей"""
+    await callback.answer()
     
-    await message.answer(users_text, reply_markup=keyboard)
+    if str(callback.from_user.id) != MANAGER_CHAT_ID:
+        return
+    
+    # Извлекаем номер страницы
+    if callback.data == "users_page_current":
+        return
+    
+    page = int(callback.data.split('_')[-1])
+    await show_users_page(callback, page=page, edit=True)
 
 
 async def delete_user_callback(callback: CallbackQuery):
@@ -700,6 +745,13 @@ async def confirm_delete_callback(callback: CallbackQuery):
         username = user_data.get('first_name', 'Неизвестный')
         user_username = user_data.get('username', 'Неизвестный')
         
+        # Удаляем отпуск если есть
+        vacations = feedback_bot.holidays_settings.get("vacations", {})
+        had_vacation = user_to_delete in vacations
+        if had_vacation:
+            del feedback_bot.holidays_settings["vacations"][user_to_delete]
+            feedback_bot.save_holidays_settings(feedback_bot.holidays_settings)
+        
         # Удаляем пользователя
         del feedback_bot.users[user_to_delete]
         feedback_bot.save_users()
@@ -707,10 +759,11 @@ async def confirm_delete_callback(callback: CallbackQuery):
         # Логируем удаление
         logger.info(f"Администратор удалил пользователя: {username} (@{user_username}, ID: {user_to_delete})")
         
+        vacation_note = "\n\n📅 Отпуск пользователя также удален" if had_vacation else ""
+        
         await callback.message.edit_text(
             f"✅ Пользователь удален\n\n"
-            f"Пользователь {username} (@{user_username}) успешно удален из системы.\n\n"
-            f"📝 Его ответы в отчетах сохранены."
+            f"Пользователь {username} (@{user_username}) успешно удален из системы.{vacation_note}"
         )
         
     elif callback.data == 'cancel_delete':
@@ -921,46 +974,317 @@ async def holidays_command(message: Message):
     await message.answer(holidays_text, parse_mode='Markdown')
 
 
-async def vacation_command(message: Message):
-    """Команда для назначения отпуска (только для админа)"""
+async def vacation_command(message: Message, state: FSMContext):
+    """Команда для назначения отпуска с выбором пользователя или через аргументы"""
     user_id = str(message.from_user.id)
     
     if user_id != MANAGER_CHAT_ID:
         await message.answer("❌ Эта команда доступна только администратору.")
         return
     
+    # Проверяем есть ли аргументы (старый формат: /vacation @user ДД.ММ.ГГГГ-ДД.ММ.ГГГГ)
     args = message.text.split(maxsplit=2)
-    if len(args) < 3:
-        await message.answer(
-            "❌ Неверный формат команды.\n\n"
-            "Используйте:\n"
-            "`/vacation @username 10.03.2026-20.03.2026`",
-            parse_mode='Markdown'
+    
+    if len(args) >= 3:
+        # Старый формат с аргументами
+        username = args[1].replace('@', '')
+        dates_str = args[2]
+        
+        # Находим пользователя
+        target_user_id = None
+        for uid, user_data in feedback_bot.users.items():
+            if user_data.get('username', '').lower() == username.lower():
+                target_user_id = uid
+                break
+        
+        if not target_user_id:
+            await message.answer(f"❌ Пользователь @{username} не найден")
+            return
+        
+        # Парсим даты
+        try:
+            start_str, end_str = dates_str.split('-')
+            start_date = datetime.strptime(start_str.strip(), '%d.%m.%Y').date()
+            end_date = datetime.strptime(end_str.strip(), '%d.%m.%Y').date()
+            
+            if end_date < start_date:
+                await message.answer("❌ Дата окончания не может быть раньше даты начала")
+                return
+            
+            # Сохраняем отпуск
+            if "vacations" not in feedback_bot.holidays_settings:
+                feedback_bot.holidays_settings["vacations"] = {}
+            
+            feedback_bot.holidays_settings["vacations"][target_user_id] = {
+                "username": username,
+                "start": start_date.strftime('%Y-%m-%d'),
+                "end": end_date.strftime('%Y-%m-%d'),
+                "set_by_admin": user_id,
+                "set_at": datetime.now(MSK_TZ).isoformat()
+            }
+            
+            feedback_bot.save_holidays_settings(feedback_bot.holidays_settings)
+            
+            days_count = (end_date - start_date).days + 1
+            user_data = feedback_bot.users[target_user_id]
+            first_name = user_data.get('first_name', 'Неизвестный')
+            
+            await message.answer(
+                f"✅ Отпуск установлен:\n"
+                f"👤 {first_name} (@{username})\n"
+                f"📅 С {start_date.strftime('%d.%m.%Y')} по {end_date.strftime('%d.%m.%Y')}\n"
+                f"📊 Продолжительность: {days_count} дней"
+            )
+            return
+            
+        except ValueError:
+            await message.answer(
+                "❌ Неверный формат даты.\n\n"
+                "Используйте формат: ДД.ММ.ГГГГ-ДД.ММ.ГГГГ\n"
+                "Например: 10.03.2026-20.03.2026"
+            )
+            return
+    
+    # Новый формат - интерактивный выбор
+    if not feedback_bot.users or len(feedback_bot.users) <= 1:
+        await message.answer("👥 Нет сотрудников для назначения отпуска")
+        return
+    
+    await show_vacation_page(message, page=0)
+
+
+async def show_vacation_page(message_or_callback, page=0, edit=False):
+    """Показывает страницу со списком пользователей для назначения отпуска"""
+    USERS_PER_PAGE = 10
+    
+    # Получаем список пользователей (исключая админа)
+    users_list = [(uid, data) for uid, data in feedback_bot.users.items() if uid != MANAGER_CHAT_ID]
+    total_users = len(users_list)
+    
+    # Проверяем есть ли сотрудники без отпусков
+    vacations = feedback_bot.holidays_settings.get("vacations", {})
+    users_without_vacation = [uid for uid, _ in users_list if uid not in vacations]
+    
+    if total_users == 0:
+        text = "👥 Нет сотрудников"
+        keyboard = None
+    elif len(users_without_vacation) == 0:
+        text = "📅 Назначение отпуска\n\n✅ Все сотрудники уже имеют назначенные отпуска\n\nИспользуйте /vacations для управления отпусками"
+        keyboard = None
+    else:
+        total_pages = (total_users + USERS_PER_PAGE - 1) // USERS_PER_PAGE
+        
+        # Ограничиваем страницу
+        page = max(0, min(page, total_pages - 1))
+        
+        # Получаем пользователей для текущей страницы
+        start_idx = page * USERS_PER_PAGE
+        end_idx = start_idx + USERS_PER_PAGE
+        page_users = users_list[start_idx:end_idx]
+        
+        # Формируем текст
+        text = f"📅 Назначение отпуска\n"
+        text += f"Выберите сотрудника (Страница {page + 1} из {total_pages}):\n\n"
+        
+        keyboard_buttons = []
+        today = datetime.now(MSK_TZ).date()
+        
+        for idx, (chat_id, user_data) in enumerate(page_users, start=start_idx + 1):
+            first_name = user_data.get('first_name', 'Неизвестный')
+            username = user_data.get('username', 'Неизвестный')
+            
+            # Проверяем есть ли отпуск
+            vacation_info = ""
+            if chat_id in vacations:
+                try:
+                    vacation = vacations[chat_id]
+                    start = datetime.strptime(vacation["start"], '%Y-%m-%d').date()
+                    end = datetime.strptime(vacation["end"], '%Y-%m-%d').date()
+                    days_count = (end - start).days + 1
+                    
+                    if start <= today <= end:
+                        status = "🏖️ Отпуск"
+                    elif start > today:
+                        status = "📅 Запланирован"
+                    else:
+                        status = "⏹️ Завершен"
+                    
+                    vacation_info = f"\n   {status}: {start.strftime('%d.%m.%Y')}-{end.strftime('%d.%m.%Y')} ({days_count} дн.)"
+                except (ValueError, KeyError) as e:
+                    logger.error(f"Ошибка парсинга дат отпуска для пользователя {chat_id}: {e}")
+                    vacation_info = "\n   ⚠️ Ошибка данных отпуска"
+            
+            text += f"{idx}. {first_name} (@{username}){vacation_info}\n"
+            
+            # Кнопка выбора пользователя
+            keyboard_buttons.append([
+                InlineKeyboardButton(
+                    text=f"{idx}. {first_name}",
+                    callback_data=f"vacation_select_{chat_id}"
+                )
+            ])
+        
+        # Кнопки навигации
+        nav_buttons = []
+        if page > 0:
+            nav_buttons.append(InlineKeyboardButton(text="◀️ Назад", callback_data=f"vacation_page_{page-1}"))
+        nav_buttons.append(InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="vacation_page_current"))
+        if page < total_pages - 1:
+            nav_buttons.append(InlineKeyboardButton(text="Вперед ▶️", callback_data=f"vacation_page_{page+1}"))
+        
+        if nav_buttons:
+            keyboard_buttons.append(nav_buttons)
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+    
+    # Отправляем или редактируем сообщение
+    if edit and isinstance(message_or_callback, CallbackQuery):
+        await message_or_callback.message.edit_text(text, reply_markup=keyboard)
+    else:
+        msg = message_or_callback if isinstance(message_or_callback, Message) else message_or_callback.message
+        await msg.answer(text, reply_markup=keyboard)
+
+
+async def vacation_page_callback(callback: CallbackQuery):
+    """Обработчик переключения страниц отпусков"""
+    await callback.answer()
+    
+    if str(callback.from_user.id) != MANAGER_CHAT_ID:
+        return
+    
+    if callback.data == "vacation_page_current":
+        return
+    
+    page = int(callback.data.split('_')[-1])
+    await show_vacation_page(callback, page=page, edit=True)
+
+
+async def vacation_select_callback(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора пользователя для отпуска"""
+    await callback.answer()
+    
+    if str(callback.from_user.id) != MANAGER_CHAT_ID:
+        return
+    
+    # Извлекаем ID пользователя
+    user_id = callback.data.replace('vacation_select_', '')
+    
+    if user_id not in feedback_bot.users:
+        await callback.message.answer("❌ Пользователь не найден")
+        return
+    
+    user_data = feedback_bot.users[user_id]
+    first_name = user_data.get('first_name', 'Неизвестный')
+    username = user_data.get('username', 'Неизвестный')
+    
+    # Проверяем есть ли уже отпуск
+    if user_id in feedback_bot.holidays_settings.get("vacations", {}):
+        vacation = feedback_bot.holidays_settings["vacations"][user_id]
+        start = datetime.strptime(vacation["start"], '%Y-%m-%d').date()
+        end = datetime.strptime(vacation["end"], '%Y-%m-%d').date()
+        days_count = (end - start).days + 1
+        today = datetime.now(MSK_TZ).date()
+        
+        # Определяем статус
+        if start <= today <= end:
+            status = "🏖️ Сейчас в отпуске"
+        elif start > today:
+            status = "📅 Запланирован"
+        else:
+            status = "⏹️ Завершен"
+        
+        # Сохраняем данные для редактирования
+        await state.update_data(
+            vacation_user_id=user_id, 
+            vacation_username=username, 
+            vacation_first_name=first_name
+        )
+        
+        # Показываем предупреждение с кнопками
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✏️ Изменить даты", callback_data=f"vacation_edit_{user_id}"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="vacation_cancel")
+            ]
+        ])
+        
+        await callback.message.answer(
+            f"⚠️ У сотрудника {first_name} (@{username}) уже есть отпуск:\n\n"
+            f"📅 С {start.strftime('%d.%m.%Y')} по {end.strftime('%d.%m.%Y')}\n"
+            f"📊 Продолжительность: {days_count} дней\n"
+            f"📌 Статус: {status}\n\n"
+            f"Хотите изменить даты отпуска?",
+            reply_markup=keyboard
         )
         return
     
-    username = args[1].replace('@', '')
-    dates_str = args[2]
+    # Если отпуска нет - просим ввести даты
+    await state.update_data(vacation_user_id=user_id, vacation_username=username, vacation_first_name=first_name)
+    await state.set_state(VacationStates.waiting_for_dates)
     
-    # Находим пользователя
-    target_user_id = None
-    for uid, user_data in feedback_bot.users.items():
-        if user_data.get('username', '').lower() == username.lower():
-            target_user_id = uid
-            break
+    await callback.message.answer(
+        f"✅ Выбран: {first_name} (@{username})\n\n"
+        f"Введите даты отпуска в формате:\n"
+        f"ДД.ММ.ГГГГ-ДД.ММ.ГГГГ\n\n"
+        f"Например: 10.03.2026-20.03.2026"
+    )
+
+
+async def vacation_edit_callback(callback: CallbackQuery, state: FSMContext):
+    """Обработчик кнопки 'Изменить даты'"""
+    await callback.answer()
+    
+    if str(callback.from_user.id) != MANAGER_CHAT_ID:
+        return
+    
+    # Получаем данные из state
+    user_data = await state.get_data()
+    first_name = user_data.get('vacation_first_name', 'Неизвестный')
+    username = user_data.get('vacation_username', 'Неизвестный')
+    
+    # Переводим в состояние редактирования
+    await state.set_state(VacationStates.waiting_for_edit_dates)
+    
+    await callback.message.answer(
+        f"✏️ Изменение отпуска для {first_name} (@{username})\n\n"
+        f"Введите новые даты отпуска в формате:\n"
+        f"ДД.ММ.ГГГГ-ДД.ММ.ГГГГ\n\n"
+        f"Например: 10.03.2026-20.03.2026"
+    )
+
+
+async def vacation_cancel_callback(callback: CallbackQuery, state: FSMContext):
+    """Обработчик кнопки 'Отмена'"""
+    await callback.answer()
+    
+    if str(callback.from_user.id) != MANAGER_CHAT_ID:
+        return
+    
+    await state.clear()
+    await callback.message.answer("❌ Операция отменена")
+
+
+async def vacation_dates_handler(message: Message, state: FSMContext):
+    """Обработчик ввода дат отпуска (новый отпуск)"""
+    user_data = await state.get_data()
+    target_user_id = user_data.get('vacation_user_id')
+    username = user_data.get('vacation_username')
+    first_name = user_data.get('vacation_first_name')
     
     if not target_user_id:
-        await message.answer(f"❌ Пользователь @{username} не найден")
+        await message.answer("❌ Ошибка: пользователь не выбран")
+        await state.clear()
         return
     
     # Парсим даты
     try:
+        dates_str = message.text.strip()
         start_str, end_str = dates_str.split('-')
         start_date = datetime.strptime(start_str.strip(), '%d.%m.%Y').date()
         end_date = datetime.strptime(end_str.strip(), '%d.%m.%Y').date()
         
         if end_date < start_date:
-            await message.answer("❌ Дата окончания не может быть раньше даты начала")
+            await message.answer("❌ Дата окончания не может быть раньше даты начала\n\nПопробуйте еще раз:")
             return
         
         # Сохраняем отпуск
@@ -971,78 +1295,312 @@ async def vacation_command(message: Message):
             "username": username,
             "start": start_date.strftime('%Y-%m-%d'),
             "end": end_date.strftime('%Y-%m-%d'),
-            "set_by_admin": user_id,
+            "set_by_admin": str(message.from_user.id),
             "set_at": datetime.now(MSK_TZ).isoformat()
         }
         
         feedback_bot.save_holidays_settings(feedback_bot.holidays_settings)
         
         days_count = (end_date - start_date).days + 1
-        user_data = feedback_bot.users[target_user_id]
-        first_name = user_data.get('first_name', 'Неизвестный')
         
         await message.answer(
             f"✅ Отпуск установлен:\n"
             f"👤 {first_name} (@{username})\n"
-            f"📅 С {start_date.strftime('%d.%m.%Y')} по {end_date.strftime('%d.%m.%Y')} ({days_count} дней)"
+            f"📅 С {start_date.strftime('%d.%m.%Y')} по {end_date.strftime('%d.%m.%Y')}\n"
+            f"📊 Продолжительность: {days_count} дней"
         )
+        
+        await state.clear()
         
     except ValueError:
         await message.answer(
             "❌ Неверный формат даты.\n\n"
             "Используйте формат: ДД.ММ.ГГГГ-ДД.ММ.ГГГГ\n"
-            "Например: `10.03.2026-20.03.2026`",
-            parse_mode='Markdown'
+            "Например: 10.03.2026-20.03.2026\n\n"
+            "Попробуйте еще раз:"
+        )
+
+
+async def vacation_edit_dates_handler(message: Message, state: FSMContext):
+    """Обработчик ввода дат отпуска (изменение существующего)"""
+    user_data = await state.get_data()
+    target_user_id = user_data.get('vacation_user_id')
+    username = user_data.get('vacation_username')
+    first_name = user_data.get('vacation_first_name')
+    
+    if not target_user_id:
+        await message.answer("❌ Ошибка: пользователь не выбран")
+        await state.clear()
+        return
+    
+    # Парсим даты
+    try:
+        dates_str = message.text.strip()
+        start_str, end_str = dates_str.split('-')
+        start_date = datetime.strptime(start_str.strip(), '%d.%m.%Y').date()
+        end_date = datetime.strptime(end_str.strip(), '%d.%m.%Y').date()
+        
+        if end_date < start_date:
+            await message.answer("❌ Дата окончания не может быть раньше даты начала\n\nПопробуйте еще раз:")
+            return
+        
+        # Обновляем отпуск
+        if "vacations" not in feedback_bot.holidays_settings:
+            feedback_bot.holidays_settings["vacations"] = {}
+        
+        feedback_bot.holidays_settings["vacations"][target_user_id] = {
+            "username": username,
+            "start": start_date.strftime('%Y-%m-%d'),
+            "end": end_date.strftime('%Y-%m-%d'),
+            "set_by_admin": str(message.from_user.id),
+            "set_at": datetime.now(MSK_TZ).isoformat()
+        }
+        
+        feedback_bot.save_holidays_settings(feedback_bot.holidays_settings)
+        
+        days_count = (end_date - start_date).days + 1
+        
+        await message.answer(
+            f"✅ Отпуск изменен:\n"
+            f"👤 {first_name} (@{username})\n"
+            f"📅 С {start_date.strftime('%d.%m.%Y')} по {end_date.strftime('%d.%m.%Y')}\n"
+            f"📊 Продолжительность: {days_count} дней"
+        )
+        
+        await state.clear()
+        
+    except ValueError:
+        await message.answer(
+            "❌ Неверный формат даты.\n\n"
+            "Используйте формат: ДД.ММ.ГГГГ-ДД.ММ.ГГГГ\n"
+            "Например: 10.03.2026-20.03.2026\n\n"
+            "Попробуйте еще раз:"
         )
 
 
 async def vacations_command(message: Message):
-    """Команда для просмотра списка отпусков (только для админа)"""
+    """Команда для просмотра списка отпусков с пагинацией (только для админа)"""
     user_id = str(message.from_user.id)
     
     if user_id != MANAGER_CHAT_ID:
         await message.answer("❌ Эта команда доступна только администратору.")
         return
     
+    # Автоматически удаляем завершенные отпуска
+    feedback_bot.cleanup_expired_vacations()
+    
+    # Показываем первую страницу
+    await show_vacations_page(message, page=0)
+
+
+async def show_vacations_page(message_or_callback, page=0, edit=False):
+    """Показывает страницу со списком отпусков"""
+    VACATIONS_PER_PAGE = 10
+    
     vacations = feedback_bot.holidays_settings.get("vacations", {})
     
     if not vacations:
-        await message.answer("👥 Сотрудники в отпуске:\n\nСейчас все на работе 💼")
+        text = "📅 Список отпусков\n\n❌ Отпусков пока не назначено"
+        keyboard = None
+    else:
+        # Подготавливаем список отпусков с сортировкой по дате окончания
+        today = datetime.now(MSK_TZ).date()
+        vacations_list = []
+        
+        for user_id, vacation in vacations.items():
+            if user_id not in feedback_bot.users:
+                continue  # Пропускаем удаленных пользователей
+            
+            try:
+                start_date = datetime.strptime(vacation["start"], '%Y-%m-%d').date()
+                end_date = datetime.strptime(vacation["end"], '%Y-%m-%d').date()
+            except (ValueError, KeyError) as e:
+                logger.error(f"Ошибка парсинга дат отпуска для пользователя {user_id}: {e}")
+                continue  # Пропускаем поврежденные данные
+            
+            user_data = feedback_bot.users[user_id]
+            
+            vacations_list.append({
+                'user_id': user_id,
+                'first_name': user_data.get('first_name', 'Неизвестный'),
+                'username': user_data.get('username', 'Неизвестный'),
+                'start_date': start_date,
+                'end_date': end_date,
+                'days_count': (end_date - start_date).days + 1
+            })
+        
+        # Сортируем по дате окончания (ближайшие к завершению первыми)
+        vacations_list.sort(key=lambda x: x['end_date'])
+        
+        total_vacations = len(vacations_list)
+        total_pages = (total_vacations + VACATIONS_PER_PAGE - 1) // VACATIONS_PER_PAGE
+        
+        if total_pages == 0:
+            text = "📅 Список отпусков\n\n❌ Отпусков пока не назначено"
+            keyboard = None
+        else:
+            # Ограничиваем страницу
+            page = max(0, min(page, total_pages - 1))
+            
+            # Получаем отпуска для текущей страницы
+            start_idx = page * VACATIONS_PER_PAGE
+            end_idx = start_idx + VACATIONS_PER_PAGE
+            page_vacations = vacations_list[start_idx:end_idx]
+            
+            # Формируем текст
+            text = f"📅 Список отпусков ({total_vacations})\n"
+            text += f"Страница {page + 1} из {total_pages}\n\n"
+            
+            keyboard_buttons = []
+            
+            for idx, vac in enumerate(page_vacations, start=start_idx + 1):
+                # Определяем статус
+                if vac['start_date'] <= today <= vac['end_date']:
+                    status = "🏖️ Отпуск"
+                elif vac['start_date'] > today:
+                    status = "📅 Запланирован"
+                else:
+                    status = "⏹️ Завершен"
+                
+                text += f"{idx}. {vac['first_name']} (@{vac['username']})\n"
+                text += f"   {status}\n"
+                text += f"   📅 {vac['start_date'].strftime('%d.%m.%Y')} - {vac['end_date'].strftime('%d.%m.%Y')}\n"
+                text += f"   📊 {vac['days_count']} дней\n\n"
+                
+                # Кнопка удаления
+                keyboard_buttons.append([
+                    InlineKeyboardButton(
+                        text=f"❌ {idx}. {vac['first_name']}",
+                        callback_data=f"vacations_delete_{vac['user_id']}"
+                    )
+                ])
+            
+            # Кнопки навигации
+            nav_buttons = []
+            if page > 0:
+                nav_buttons.append(InlineKeyboardButton(text="◀️ Назад", callback_data=f"vacations_page_{page-1}"))
+            nav_buttons.append(InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="vacations_page_current"))
+            if page < total_pages - 1:
+                nav_buttons.append(InlineKeyboardButton(text="Вперед ▶️", callback_data=f"vacations_page_{page+1}"))
+            
+            if nav_buttons:
+                keyboard_buttons.append(nav_buttons)
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+    
+    # Отправляем или редактируем сообщение
+    if edit and isinstance(message_or_callback, CallbackQuery):
+        await message_or_callback.message.edit_text(text, reply_markup=keyboard)
+    else:
+        msg = message_or_callback if isinstance(message_or_callback, Message) else message_or_callback.message
+        await msg.answer(text, reply_markup=keyboard)
+
+
+async def vacations_page_callback(callback: CallbackQuery):
+    """Обработчик переключения страниц отпусков"""
+    await callback.answer()
+    
+    if str(callback.from_user.id) != MANAGER_CHAT_ID:
         return
     
-    today = datetime.now(MSK_TZ).date()
-    current_vacations = []
-    upcoming_vacations = []
+    if callback.data == "vacations_page_current":
+        return
     
-    for uid, vacation in vacations.items():
+    page = int(callback.data.split('_')[-1])
+    await show_vacations_page(callback, page=page, edit=True)
+
+
+async def vacations_delete_callback(callback: CallbackQuery):
+    """Обработчик кнопки удаления отпуска"""
+    await callback.answer()
+    
+    if str(callback.from_user.id) != MANAGER_CHAT_ID:
+        await callback.message.answer("❌ Только администратор может удалять отпуска.")
+        return
+    
+    # Извлекаем ID пользователя
+    user_id = callback.data.replace('vacations_delete_', '')
+    
+    # Проверяем что отпуск существует
+    vacations = feedback_bot.holidays_settings.get("vacations", {})
+    if user_id not in vacations:
+        await callback.message.answer("❌ Отпуск не найден")
+        return
+    
+    # Получаем данные отпуска
+    vacation = vacations[user_id]
+    start_date = datetime.strptime(vacation["start"], '%Y-%m-%d').date()
+    end_date = datetime.strptime(vacation["end"], '%Y-%m-%d').date()
+    days_count = (end_date - start_date).days + 1
+    
+    # Получаем данные пользователя
+    user_data = feedback_bot.users.get(user_id, {})
+    first_name = user_data.get('first_name', 'Неизвестный')
+    username = user_data.get('username', 'Неизвестный')
+    
+    # Создаем кнопки подтверждения
+    confirm_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_vacations_delete_{user_id}"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_vacations_delete")
+        ]
+    ])
+    
+    await callback.message.answer(
+        f"⚠️ Подтверждение удаления\n\n"
+        f"Вы действительно хотите удалить отпуск?\n\n"
+        f"👤 {first_name} (@{username})\n"
+        f"📅 {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}\n"
+        f"📊 {days_count} дней",
+        reply_markup=confirm_keyboard
+    )
+
+
+async def confirm_vacations_delete_callback(callback: CallbackQuery):
+    """Обработчик подтверждения удаления отпуска"""
+    await callback.answer()
+    
+    if str(callback.from_user.id) != MANAGER_CHAT_ID:
+        return
+    
+    if callback.data.startswith('confirm_vacations_delete_'):
+        # Извлекаем ID пользователя
+        user_id = callback.data.replace('confirm_vacations_delete_', '')
+        
+        # Проверяем что отпуск существует
+        vacations = feedback_bot.holidays_settings.get("vacations", {})
+        if user_id not in vacations:
+            await callback.message.edit_text("❌ Отпуск не найден")
+            return
+        
+        # Получаем данные для логирования
+        vacation = vacations[user_id]
         start_date = datetime.strptime(vacation["start"], '%Y-%m-%d').date()
         end_date = datetime.strptime(vacation["end"], '%Y-%m-%d').date()
         
-        if start_date <= today <= end_date:
-            # Текущий отпуск
-            days_left = (end_date - today).days
-            user_data = feedback_bot.users.get(uid, {})
-            first_name = user_data.get('first_name', 'Неизвестный')
-            current_vacations.append(f"• {first_name} - до {end_date.strftime('%d.%m.%Y')} (осталось {days_left} дн.)")
-        elif start_date > today:
-            # Будущий отпуск
-            days_count = (end_date - start_date).days + 1
-            user_data = feedback_bot.users.get(uid, {})
-            first_name = user_data.get('first_name', 'Неизвестный')
-            upcoming_vacations.append(f"• {first_name} - с {start_date.strftime('%d.%m.%Y')} по {end_date.strftime('%d.%m.%Y')} ({days_count} дн.)")
-    
-    vacations_text = "👥 **Сотрудники в отпуске:**\n\n"
-    
-    if current_vacations:
-        vacations_text += "**Сейчас отдыхают:**\n" + "\n".join(current_vacations) + "\n\n"
-    
-    if upcoming_vacations:
-        vacations_text += "**Скоро выходят:**\n" + "\n".join(upcoming_vacations)
-    
-    if not current_vacations and not upcoming_vacations:
-        vacations_text += "Сейчас все на работе 💼"
-    
-    await message.answer(vacations_text, parse_mode='Markdown')
+        user_data = feedback_bot.users.get(user_id, {})
+        first_name = user_data.get('first_name', 'Неизвестный')
+        username = user_data.get('username', 'Неизвестный')
+        
+        # Удаляем отпуск
+        del feedback_bot.holidays_settings["vacations"][user_id]
+        feedback_bot.save_holidays_settings(feedback_bot.holidays_settings)
+        
+        logger.info(f"Администратор удалил отпуск: {first_name} (@{username}, {start_date} - {end_date})")
+        
+        await callback.message.edit_text(
+            f"✅ Отпуск удален\n\n"
+            f"👤 {first_name} (@{username})\n"
+            f"📅 Отпуск с {start_date.strftime('%d.%m.%Y')} по {end_date.strftime('%d.%m.%Y')} удален"
+        )
+        
+        # Возвращаемся к обновленному списку
+        await show_vacations_page(callback, page=0, edit=False)
+        
+    elif callback.data == 'cancel_vacations_delete':
+        await callback.message.edit_text("❌ Удаление отменено")
+        # Возвращаемся к списку
+        await show_vacations_page(callback, page=0, edit=False)
 
 
 async def removevacation_command(message: Message):
@@ -1201,7 +1759,9 @@ async def generate_user_monthly_report(user_id, year, month):
             text = MOOD_OPTIONS[mood_key]['text']
             bar_length = int(percentage / 10)
             bar = '█' * bar_length + '░' * (10 - bar_length)
-            report += f"{emoji} {text:12} {bar} {count} дней ({percentage:.0f}%)\n"
+            # Разделяем на две строки для правильного выравнивания
+            report += f"{emoji} {text}\n"
+            report += f"{bar} {count} дней ({percentage:.0f}%)\n\n"
         
         report += f"\n📈 Средняя оценка: {avg_score:.1f}/5\n\n"
         report += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"

@@ -136,6 +136,29 @@ class FeedbackBot:
         end_date = datetime.strptime(vacation["end"], '%Y-%m-%d').date()
         
         return start_date <= check_date <= end_date
+    
+    def cleanup_expired_vacations(self):
+        """Удаляет завершенные отпуска (которые уже закончились)"""
+        from datetime import timedelta
+        
+        vacations = self.holidays_settings.get("vacations", {})
+        if not vacations:
+            return
+        
+        today = date.today()
+        expired_users = []
+        
+        for user_id, vacation in vacations.items():
+            end_date = datetime.strptime(vacation["end"], '%Y-%m-%d').date()
+            # Удаляем отпуска, которые уже закончились (дата окончания в прошлом)
+            if end_date < today:
+                expired_users.append(user_id)
+        
+        if expired_users:
+            for user_id in expired_users:
+                del self.holidays_settings["vacations"][user_id]
+            self.save_holidays_settings(self.holidays_settings)
+            logger.info(f"Удалено завершенных отпусков: {len(expired_users)}")
 
 
 # Создаем глобальный экземпляр
