@@ -142,8 +142,7 @@ async def help_command(message: Message):
             "📊 **Автоматические процессы:**\n"
             f"• **{SURVEY_TIME} МСК** - автоматический опрос всех сотрудников\n"
             f"• **{REPORT_TIME} МСК** - автоматический отчет + CSV файл\n"
-            "• **01 число каждого месяца** - месячные отчеты сотрудникам\n\n"
-            "💡 **Совет:** Используйте `/reports` для просмотра всех доступных отчетов"
+            "• **01 число каждого месяца** - месячные отчеты сотрудникам"
         )
     else:
         # Помощь для сотрудника
@@ -448,8 +447,7 @@ async def download_command(message: Message, bot_instance):
             "Возможные причины:\n"
             "• Отчет еще не был создан\n"
             "• Никто не ответил на опрос в этот день\n"
-            "• Неверная дата\n\n"
-            "💡 Используйте `/reports` для просмотра доступных отчетов"
+            "• Неверная дата"
         )
         return
     
@@ -495,7 +493,7 @@ async def reports_list_command(message: Message):
     
     report_list += (
         f"\n📊 Всего отчетов: {len(csv_files)}\n\n"
-        "💡 **Как скачать:**\n"
+        "**Как скачать:**\n"
         "• `/download` - отчет за сегодня\n"
         "• `/download ДД.ММ.ГГГГ` - отчет за конкретную дату"
     )
@@ -793,8 +791,7 @@ async def reminders_command(message: Message):
         f"**Команды:**\n"
         f"• `/reminders set 17:30,18:00,18:30` - установить время\n"
         f"• `/reminders on` - включить напоминания\n"
-        f"• `/reminders off` - отключить напоминания\n\n"
-        f"💡 Напоминания отправляются только тем, кто не ответил на опрос"
+        f"• `/reminders off` - отключить напоминания"
     )
     
     await message.answer(reminder_text, parse_mode='Markdown')
@@ -810,13 +807,17 @@ async def reminders_set_command(message: Message):
     
     args = message.text.split(maxsplit=2)
     
-    if len(args) < 3:
-        await message.answer("❌ Неверный формат команды. Используйте:\n`/reminders set 17:30,18:00,18:30`", parse_mode='Markdown')
+    if len(args) < 2:
+        await message.answer("❌ Неверный формат команды. Используйте:\n`/reminders set 17:30,18:00,18:30`\n`/reminders on`\n`/reminders off`", parse_mode='Markdown')
         return
     
     action = args[1].lower()
     
     if action == "set":
+        if len(args) < 3:
+            await message.answer("❌ Неверный формат команды. Используйте:\n`/reminders set 17:30,18:00,18:30`", parse_mode='Markdown')
+            return
+            
         # Парсим время
         times_str = args[2]
         times = [t.strip() for t in times_str.split(',')]
@@ -968,8 +969,6 @@ async def holidays_command(message: Message):
         for holiday_date, holiday_name in month_holidays:
             holidays_text += f"• {holiday_date.strftime('%d.%m')} - {holiday_name}\n"
         holidays_text += "\n"
-    
-    holidays_text += "💡 Бот автоматически не отправляет опросы в эти дни"
     
     await message.answer(holidays_text, parse_mode='Markdown')
 
