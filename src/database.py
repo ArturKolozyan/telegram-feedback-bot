@@ -6,7 +6,7 @@ from datetime import datetime, date
 from workalendar.europe import Russia
 from config import (
     USER_DATA_FILE, RESPONSES_FILE, REMINDER_SETTINGS_FILE, HOLIDAYS_FILE,
-    SCHEDULE_SETTINGS_FILE, logger
+    SCHEDULE_SETTINGS_FILE, MONTHLY_REPORTS_TRACKING_FILE, logger
 )
 
 # Производственный календарь РФ
@@ -188,6 +188,28 @@ class FeedbackBot:
                 del self.holidays_settings["vacations"][user_id]
             self.save_holidays_settings(self.holidays_settings)
             logger.info(f"Удалено завершенных отпусков: {len(expired_users)}")
+    
+    def load_monthly_reports_tracking(self):
+        """Загружает информацию об отправленных месячных отчетах"""
+        try:
+            if MONTHLY_REPORTS_TRACKING_FILE.exists():
+                with open(MONTHLY_REPORTS_TRACKING_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            else:
+                logger.info("Создаю файл monthly_reports_tracking.json")
+                return {}
+        except Exception as e:
+            logger.error(f"Ошибка загрузки monthly_reports_tracking.json: {e}")
+            return {}
+    
+    def save_monthly_reports_tracking(self, tracking_data):
+        """Сохраняет информацию об отправленных месячных отчетах"""
+        try:
+            with open(MONTHLY_REPORTS_TRACKING_FILE, 'w', encoding='utf-8') as f:
+                json.dump(tracking_data, f, ensure_ascii=False, indent=2)
+            logger.info("Информация об отправленных месячных отчетах сохранена")
+        except Exception as e:
+            logger.error(f"Ошибка сохранения monthly_reports_tracking.json: {e}")
 
 
 # Создаем глобальный экземпляр

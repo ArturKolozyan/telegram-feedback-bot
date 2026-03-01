@@ -61,6 +61,9 @@ async def send_daily_survey_async(bot_instance):
         today = datetime.now(MSK_TZ).strftime('%Y-%m-%d')
         today_date = datetime.now(MSK_TZ).date()
         
+        # Перезагружаем настройки выходных перед проверкой
+        feedback_bot.holidays_settings = feedback_bot.load_holidays_settings()
+        
         # Проверяем, рабочий ли день
         if not feedback_bot.is_working_day(today_date):
             logger.info(f"Сегодня выходной/праздник ({today}), опросы не отправляются")
@@ -364,6 +367,63 @@ async def send_monthly_reports(bot_instance):
         logger.error(f"Ошибка в отправке месячных отчетов: {e}")
 
 
+async def check_and_send_monthly_reports(bot_instance, current_datetime):
+    """Проверяет нужно ли отправить месячные отчеты (в первый рабочий день месяца)"""
+    try:
+        today_date = current_datetime.date()
+        current_month = current_datetime.month
+        current_year = current_datetime.year
+        
+        # Перезагружаем настройки выходных перед проверкой
+        feedback_bot.holidays_settings = feedback_bot.load_holidays_settings()
+        
+        # Проверяем что сегодня рабочий день
+        if not feedback_bot.is_working_day(today_date):
+            logger.debug("Сегодня выходной, месячные отчеты не отправляются")
+            return
+        
+        # Вычисляем прошлый месяц (за который отправляем отчет)
+        if current_month == 1:
+            report_year = current_year - 1
+            report_month = 12
+        else:
+            report_year = current_year
+            report_month = current_month - 1
+        
+        # Получаем ключ для отслеживания отправленных отчетов (за ПРОШЛЫЙ месяц)
+        report_key = f"{report_year}-{report_month:02d}"
+        
+        # Загружаем информацию об отправленных месячных отчетах
+        if not hasattr(feedback_bot, 'monthly_reports_sent'):
+            feedback_bot.monthly_reports_sent = feedback_bot.load_monthly_reports_tracking()
+        
+        # Проверяем был ли уже отправлен отчет за прошлый месяц
+        if report_key in feedback_bot.monthly_reports_sent:
+            logger.debug(f"Месячные отчеты за {report_key} уже были отправлены")
+            return
+        
+        # Проверяем что мы в начале месяца (первые 5 дней)
+        if current_datetime.day > 5:
+            logger.debug(f"Уже {current_datetime.day}-е число, слишком поздно для месячных отчетов")
+            return
+        
+        # Отправляем месячные отчеты
+        logger.info(f"Первый рабочий день месяца ({today_date}), отправка месячных отчетов за {report_month}/{report_year}...")
+        await send_monthly_reports(bot_instance)
+        
+        # Сохраняем информацию что отчет отправлен
+        feedback_bot.monthly_reports_sent[report_key] = {
+            "sent_at": datetime.now(MSK_TZ).isoformat(),
+            "sent_on_day": current_datetime.day,
+            "report_for_month": report_month,
+            "report_for_year": report_year
+        }
+        feedback_bot.save_monthly_reports_tracking(feedback_bot.monthly_reports_sent)
+        
+    except Exception as e:
+        logger.error(f"Ошибка в проверке месячных отчетов: {e}")
+
+
 async def scheduler_task(bot_instance):
     """Планировщик задач"""
     survey_time = feedback_bot.schedule_settings.get("survey_time", "17:00")
@@ -397,15 +457,20 @@ async def scheduler_task(bot_instance):
                 logger.info("Запуск ежедневного опроса...")
                 await send_daily_survey_async(bot_instance)
             
-            # Отчет
-            elif current_time == report_time:
-                logger.info("Запуск формирования отчета...")
-                await generate_daily_report_async(bot_instance)
+            # Отчет (только в рабочие дни)
+            if current_time == report_time:
+                today_date = next_minute.date()
+                # Перезагружаем настройки выходных перед проверкой
+                feedback_bot.holidays_settings = feedback_bot.load_holidays_settings()
+                if feedback_bot.is_working_day(today_date):
+                    logger.info("Запуск формирования отчета...")
+                    await generate_daily_report_async(bot_instance)
+                else:
+                    logger.info("Сегодня выходной день, отчет не отправляется")
             
-            # Месячные отчеты (1-го числа в 09:00)
-            elif current_time == "09:00" and next_minute.day == 1:
-                logger.info("Запуск отправки месячных отчетов...")
-                await send_monthly_reports(bot_instance)
+            # Месячные отчеты (в первый рабочий день месяца в 09:00)
+            if current_time == "09:00":
+                await check_and_send_monthly_reports(bot_instance, next_minute)
             
             # Логирование каждые 10 минут
             if next_minute.minute % 10 == 0:

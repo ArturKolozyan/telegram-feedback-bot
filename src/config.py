@@ -32,6 +32,7 @@ RESPONSES_FILE = DATA_DIR / 'responses.json'
 REMINDER_SETTINGS_FILE = DATA_DIR / 'reminder_settings.json'
 HOLIDAYS_FILE = DATA_DIR / 'holidays.json'
 SCHEDULE_SETTINGS_FILE = DATA_DIR / 'schedule_settings.json'
+MONTHLY_REPORTS_TRACKING_FILE = DATA_DIR / 'monthly_reports_tracking.json'
 
 # Создаем директории если не существуют
 DATA_DIR.mkdir(exist_ok=True)
