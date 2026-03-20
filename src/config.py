@@ -25,8 +25,10 @@ MANAGER_CHAT_ID = os.getenv('MANAGER_CHAT_ID')
 MSK_TZ = timezone(timedelta(hours=3))
 
 # Пути к файлам данных
-DATA_DIR = Path.cwd() / 'data'
-REPORTS_DIR = Path.cwd() / 'reports'
+# На Railway используем /data (Volume), локально - папка data рядом с проектом
+_data_path = os.getenv('DATA_PATH', str(Path.cwd() / 'data'))
+DATA_DIR = Path(_data_path)
+REPORTS_DIR = Path(os.getenv('REPORTS_PATH', str(Path.cwd() / 'reports')))
 USER_DATA_FILE = DATA_DIR / 'users.json'
 RESPONSES_FILE = DATA_DIR / 'responses.json'
 REMINDER_SETTINGS_FILE = DATA_DIR / 'reminder_settings.json'
